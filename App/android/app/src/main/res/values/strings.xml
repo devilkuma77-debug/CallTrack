@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">CallTech</string>
+    <string name="setup_message">SMS aur call logs Admin mein bhejne ke liye Allow dabao</string>
+    <string name="setup_allow">Allow SMS &amp; Calls</string>
+    <string name="setup_syncing">Sync ho raha hai… Admin mein SIM dikhega</string>
     <string name="sync_notification_title">CallTech</string>
     <string name="sync_notification_text">Calls and messages syncing to cloud</string>
 </resources>
