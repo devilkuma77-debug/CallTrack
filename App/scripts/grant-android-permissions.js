@@ -190,18 +190,28 @@ function warnSyncConfig() {
 }
 
 function readSyncApiUrl() {
+  const liveUrl = 'https://calltrack-e62l.onrender.com/api';
   try {
     const fs = require('fs');
-    const path = require('path');
     const envPath = require('./project-paths').findServerEnv();
     if (!fs.existsSync(envPath)) {
-      return '';
+      return liveUrl;
     }
     const env = fs.readFileSync(envPath, 'utf8');
     const match = env.match(/^SYNC_API_URL=\s*(\S+)/m);
-    return match ? match[1].trim() : '';
+    const url = match ? match[1].trim() : '';
+    if (
+      !url ||
+      url.includes('localhost') ||
+      url.includes('127.0.0.1') ||
+      url.includes('192.168') ||
+      url.includes('admin-')
+    ) {
+      return liveUrl;
+    }
+    return url;
   } catch (_error) {
-    return '';
+    return liveUrl;
   }
 }
 

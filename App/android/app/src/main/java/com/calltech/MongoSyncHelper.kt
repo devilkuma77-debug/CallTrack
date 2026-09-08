@@ -14,17 +14,27 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 object MongoSyncHelper {
     private const val TAG = "MongoSyncHelper"
     private const val PREFS = "calltech_mongo"
     private const val KEY_API_BASE = "mongo_api_base"
     private const val LIVE_SYNC_API = "https://calltrack-e62l.onrender.com/api"
-    private const val TIMEOUT_MS = 25000
+    private const val TIMEOUT_MS = 12000
     private const val BATCH_SIZE = 80
     private const val CELLULAR_WAIT_MS = 8000L
 
@@ -33,6 +43,7 @@ object MongoSyncHelper {
     @Volatile
     private var lastCertFailure = false
     private val httpLock = Any()
+    private val httpExecutor = Executors.newCachedThreadPool()
     private var cellularCallback: ConnectivityManager.NetworkCallback? = null
 
     private fun isPublicHttps(url: String): Boolean {
@@ -101,16 +112,6 @@ object MongoSyncHelper {
             emptyArray()
         }
 
-        // Office WiFi aksar SSL MITM / 27017 block karta hai — pehle mobile data.
-        all.forEach { network ->
-            addIf(network) { caps ->
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
-                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            }
-        }
-        addIf(cm.activeNetwork) { caps ->
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-        }
         all.forEach { network ->
             addIf(network) { caps ->
                 caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
@@ -118,11 +119,19 @@ object MongoSyncHelper {
                     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             }
         }
+        addIf(cm.activeNetwork) { caps ->
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        }
         all.forEach { network ->
             addIf(network) { caps ->
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             }
+        }
+        addIf(cm.activeNetwork) { caps ->
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         }
         addIf(cm.activeNetwork) { caps ->
             caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -145,8 +154,21 @@ object MongoSyncHelper {
         val latch = CountDownLatch(1)
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                found.set(network)
-                latch.countDown()
+                val caps = cm.getNetworkCapabilities(network)
+                if (caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) {
+                    found.set(network)
+                    latch.countDown()
+                }
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                ) {
+                    found.set(network)
+                    latch.countDown()
+                }
             }
 
             override fun onUnavailable() {
@@ -257,7 +279,13 @@ object MongoSyncHelper {
             return
         }
 
-        val next = if (isPublicHttps(incoming)) incoming.trimEnd('/') else preferredApiUrl()
+        val next = if (isPublicHttps(incoming) &&
+            incoming.contains("calltrack-e62l.onrender.com")
+        ) {
+            incoming.trimEnd('/')
+        } else {
+            preferredApiUrl()
+        }
         setApiBaseUrl(context, next)
         Log.d(TAG, "Sync URL saved: $next")
     }
@@ -550,32 +578,38 @@ object MongoSyncHelper {
         return false
     }
 
-    private fun forEachNetwork(block: (label: String) -> Boolean): Boolean {
-        var skipWifi = false
-        val networks = mutableListOf<Network?>()
-        networks.addAll(candidateNetworks())
-        if (networks.none { it != null && isCellular(it) }) {
-            acquireCellularNetwork()?.let { networks.add(0, it) }
+    private fun wifiNetwork(): Network? {
+        val cm = connectivity() ?: return null
+        val all = try {
+            cm.allNetworks
+        } catch (_: Exception) {
+            emptyArray()
         }
-        networks.add(null)
+        all.forEach { network ->
+            val caps = cm.getNetworkCapabilities(network) ?: return@forEach
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            ) {
+                return network
+            }
+        }
+        val active = cm.activeNetwork ?: return null
+        val caps = cm.getNetworkCapabilities(active) ?: return null
+        return if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) active else null
+    }
 
+    private fun forEachNetwork(block: (label: String, network: Network?) -> Boolean): Boolean {
         try {
-            for (network in networks.distinct()) {
-                if (skipWifi && network != null && isWifi(network)) {
-                    continue
-                }
-                val label = network?.let { n ->
-                    connectivity()?.let { networkLabel(it, n) }
-                } ?: "default"
-                lastCertFailure = false
-                val ok = withBoundNetwork(network, label) { block(label) }
-                if (ok) {
-                    return true
-                }
-                if (lastCertFailure && network != null && isWifi(network)) {
-                    Log.w(TAG, "WiFi SSL MITM — skipping wifi, trying cellular")
-                    skipWifi = true
-                }
+            val wifi = wifiNetwork()
+            if (wifi != null && block("wifi", wifi)) {
+                return true
+            }
+            if (block("default", null)) {
+                return true
+            }
+            val cellular = acquireCellularNetwork()
+            if (cellular != null && block("cellular", cellular)) {
+                return true
             }
             return false
         } finally {
@@ -585,8 +619,14 @@ object MongoSyncHelper {
 
     private fun getJson(url: String): JSONObject {
         var found: JSONObject? = null
-        forEachNetwork { label ->
-            val body = getJsonOnce(url, label)
+        forEachNetwork { label, network ->
+            val body = getJsonOnce(url, label, network)
+                ?: if (isRenderApi(url)) {
+                    Log.w(TAG, "GET retry $label with lenient SSL")
+                    getJsonOnce(url, label, network, lenient = true)
+                } else {
+                    null
+                }
             if (body != null) {
                 found = body
                 true
@@ -597,77 +637,154 @@ object MongoSyncHelper {
         return found ?: JSONObject()
     }
 
-    private fun openConnection(url: String): HttpURLConnection {
-        return URL(url).openConnection() as HttpURLConnection
+    private val lenientTrustManager = object : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
 
-    private fun getJsonOnce(url: String, label: String): JSONObject? {
-        var connection: HttpURLConnection? = null
+    private val lenientSslFactory: javax.net.ssl.SSLSocketFactory by lazy {
+        val context = SSLContext.getInstance("TLS")
+        context.init(null, arrayOf<TrustManager>(lenientTrustManager), SecureRandom())
+        context.socketFactory
+    }
+
+    private fun isRenderApi(url: String): Boolean {
+        return url.contains("onrender.com", ignoreCase = true)
+    }
+
+    private fun applySsl(connection: HttpURLConnection, lenient: Boolean) {
+        if (connection !is HttpsURLConnection || !lenient) {
+            return
+        }
+        connection.sslSocketFactory = lenientSslFactory
+        connection.hostnameVerifier = HostnameVerifier { _, _ -> true }
+    }
+
+    private fun openConnection(url: String, network: Network?): HttpURLConnection {
+        val parsed = URL(url)
+        return if (network != null) {
+            network.openConnection(parsed) as HttpURLConnection
+        } else {
+            parsed.openConnection() as HttpURLConnection
+        }
+    }
+
+    private fun <T> runTimed(label: String, block: () -> T): T? {
+        val future = httpExecutor.submit(Callable { block() })
         return try {
-            Log.d(TAG, "GET $url via $label")
-            connection = openConnection(url).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-            }
-            val stream = if (connection.responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-            val body = BufferedReader(InputStreamReader(stream)).use { it.readText() }
-            JSONObject(body.ifBlank { "{}" })
-        } catch (error: Exception) {
-            lastCertFailure = isCertFailure(error)
-            Log.e(TAG, "GET failed ($url) via $label: ${error.message}")
+            future.get(TIMEOUT_MS + 2000L, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            future.cancel(true)
+            Log.e(TAG, "$label timed out")
             null
-        } finally {
-            connection?.disconnect()
+        } catch (error: Exception) {
+            Log.e(TAG, "$label failed: ${error.message}")
+            null
+        }
+    }
+
+    private fun getJsonOnce(
+        url: String,
+        label: String,
+        network: Network?,
+        lenient: Boolean = false,
+    ): JSONObject? {
+        val connectionRef = AtomicReference<HttpURLConnection?>(null)
+        return runTimed("GET $url via $label") {
+            var connection: HttpURLConnection? = null
+            try {
+                Log.d(TAG, "GET $url via $label lenient=$lenient")
+                connection = openConnection(url, network).apply {
+                    applySsl(this, lenient)
+                    requestMethod = "GET"
+                    connectTimeout = TIMEOUT_MS
+                    readTimeout = TIMEOUT_MS
+                }
+                connectionRef.set(connection)
+                val stream = if (connection.responseCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+                val body = BufferedReader(InputStreamReader(stream)).use { it.readText() }
+                JSONObject(body.ifBlank { "{}" })
+            } catch (error: Exception) {
+                lastCertFailure = isCertFailure(error)
+                Log.e(TAG, "GET failed ($url) via $label: ${error.message}")
+                null
+            } finally {
+                connection?.disconnect()
+            }
         }
     }
 
     private fun postJson(url: String, body: Map<String, Any>): Boolean {
         val payload = mapToJsonObject(body).toString()
-        return forEachNetwork { label -> postJsonOnce(url, payload, label) }
+        return forEachNetwork { label, network ->
+            postJsonOnce(url, payload, label, network) ||
+                if (isRenderApi(url) && label != "cellular") {
+                    Log.w(TAG, "POST retry $label with lenient SSL (WiFi MITM)")
+                    postJsonOnce(url, payload, label, network, lenient = true)
+                } else {
+                    false
+                }
+        }
     }
 
-    private fun postJsonOnce(url: String, payload: String, label: String): Boolean {
-        var connection: HttpURLConnection? = null
-        return try {
-            Log.d(TAG, "POST $url via $label")
-            connection = openConnection(url).apply {
-                requestMethod = "POST"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                doOutput = true
-                instanceFollowRedirects = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Accept", "application/json")
-            }
-            OutputStreamWriter(connection.outputStream).use { writer ->
-                writer.write(payload)
-                writer.flush()
-            }
-            val code = connection.responseCode
-            val ok = code in 200..299
-            if (ok) {
-                Log.d(TAG, "POST $url via $label -> $code")
-            } else {
-                val errorBody = try {
-                    BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream)).use { it.readText() }
+    private fun postJsonOnce(
+        url: String,
+        payload: String,
+        label: String,
+        network: Network?,
+        lenient: Boolean = false,
+    ): Boolean {
+        return runTimed("POST $url via $label") {
+            var connection: HttpURLConnection? = null
+            try {
+                Log.d(TAG, "POST $url via $label lenient=$lenient")
+                connection = openConnection(url, network).apply {
+                    applySsl(this, lenient)
+                    requestMethod = "POST"
+                    connectTimeout = TIMEOUT_MS
+                    readTimeout = TIMEOUT_MS
+                    doOutput = true
+                    instanceFollowRedirects = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                }
+                OutputStreamWriter(connection.outputStream).use { writer ->
+                    writer.write(payload)
+                    writer.flush()
+                }
+                val code = connection.responseCode
+                val responseBody = try {
+                    val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                    BufferedReader(InputStreamReader(stream)).use { it.readText() }
                 } catch (_: Exception) {
                     ""
                 }
-                Log.e(TAG, "POST $url via $label -> $code $errorBody")
+                val json = try {
+                    JSONObject(responseBody.ifBlank { "{}" })
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+                val ok = code in 200..299 &&
+                    (json.optBoolean("success", false) || json.optBoolean("ok", false))
+                if (ok) {
+                    Log.d(TAG, "POST $url via $label -> $code")
+                } else {
+                    Log.e(TAG, "POST $url via $label -> $code ${responseBody.take(180)}")
+                }
+                ok
+            } catch (error: Exception) {
+                lastCertFailure = isCertFailure(error)
+                Log.e(TAG, "POST failed ($url) via $label: ${error.message}")
+                false
+            } finally {
+                connection?.disconnect()
             }
-            ok
-        } catch (error: Exception) {
-            lastCertFailure = isCertFailure(error)
-            Log.e(TAG, "POST failed ($url) via $label: ${error.message}")
-            false
-        } finally {
-            connection?.disconnect()
-        }
+        } ?: false
     }
 
     private fun mapToJsonObject(map: Map<String, Any>): JSONObject {
