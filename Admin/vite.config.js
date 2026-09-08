@@ -5,7 +5,7 @@ const offlinePayload = JSON.stringify({
   ok: false,
   success: false,
   mongo: false,
-  error: 'API server band hai. Server folder me node .\\index.js chalao.',
+  error: 'Live API se connect nahi ho paya. Internet check karo.',
   sims: [],
   devices: [],
   data: [],
@@ -19,7 +19,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://calltrack-e62l.onrender.com',
         changeOrigin: true,
         configure(proxy) {
           proxy.on('error', (_err, _req, res) => {

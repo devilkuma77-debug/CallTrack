@@ -18,10 +18,14 @@ object AtlasDirectSync {
 
     @Volatile
     private var client: MongoClient? = null
+    @Volatile
+    private var unreachable = false
 
     fun isConfigured(): Boolean {
         return BuildConfig.MONGODB_URI.trim().isNotBlank()
     }
+
+    fun isUnreachable(): Boolean = unreachable
 
     private fun resolveUri(): String? {
         val raw = BuildConfig.MONGODB_URI.trim()
@@ -45,11 +49,11 @@ object AtlasDirectSync {
             val settings = MongoClientSettings.builder()
                 .applyConnectionString(ConnectionString(uri))
                 .applyToSocketSettings { builder ->
-                    builder.connectTimeout(30, TimeUnit.SECONDS)
-                    builder.readTimeout(45, TimeUnit.SECONDS)
+                    builder.connectTimeout(8, TimeUnit.SECONDS)
+                    builder.readTimeout(15, TimeUnit.SECONDS)
                 }
                 .applyToClusterSettings { builder ->
-                    builder.serverSelectionTimeout(30, TimeUnit.SECONDS)
+                    builder.serverSelectionTimeout(8, TimeUnit.SECONDS)
                 }
                 .build()
 
@@ -172,6 +176,9 @@ object AtlasDirectSync {
             true
         } catch (error: Exception) {
             Log.e(TAG, "Device registration failed: ${error.message}")
+            if (error.message?.contains("Timed out", ignoreCase = true) == true) {
+                unreachable = true
+            }
             false
         }
     }
@@ -186,6 +193,9 @@ object AtlasDirectSync {
         }
 
         repeat(3) { attempt ->
+            if (unreachable) {
+                return false
+            }
             val ok = upsertCollectionOnce(simNumber, collectionName, items)
             if (ok) {
                 return true
@@ -229,6 +239,10 @@ object AtlasDirectSync {
         } catch (error: Exception) {
             Log.e(TAG, "$dbName.$collectionName upsert failed: ${error.message}", error)
             logAuthHint(error)
+            if (error.message?.contains("Timed out", ignoreCase = true) == true) {
+                unreachable = true
+                Log.w(TAG, "Atlas Direct unreachable on this network — HTTP Render sync only")
+            }
             false
         }
     }

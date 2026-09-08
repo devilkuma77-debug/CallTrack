@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,22 +14,26 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.Callable
-import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicReference
+import javax.net.ssl.SSLHandshakeException
 
 object MongoSyncHelper {
     private const val TAG = "MongoSyncHelper"
     private const val PREFS = "calltech_mongo"
     private const val KEY_API_BASE = "mongo_api_base"
     private const val LIVE_SYNC_API = "https://calltrack-e62l.onrender.com/api"
-    private const val TIMEOUT_MS = 20000
-    private const val BATCH_SIZE = 150
+    private const val TIMEOUT_MS = 25000
+    private const val BATCH_SIZE = 80
+    private const val CELLULAR_WAIT_MS = 8000L
 
     @Volatile
     private var appContext: Context? = null
-    private val httpExecutor = Executors.newCachedThreadPool()
+    @Volatile
+    private var lastCertFailure = false
+    private val httpLock = Any()
+    private var cellularCallback: ConnectivityManager.NetworkCallback? = null
 
     private fun isPublicHttps(url: String): Boolean {
         val value = url.trim().lowercase()
@@ -65,6 +71,16 @@ object MongoSyncHelper {
         }
     }
 
+    private fun isCellular(network: Network): Boolean {
+        val caps = connectivity()?.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+    }
+
+    private fun isWifi(network: Network): Boolean {
+        val caps = connectivity()?.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
     private fun candidateNetworks(): List<Network> {
         val cm = connectivity() ?: return emptyList()
         val ordered = mutableListOf<Network>()
@@ -84,18 +100,27 @@ object MongoSyncHelper {
         } catch (_: Exception) {
             emptyArray()
         }
+
+        // Office WiFi aksar SSL MITM / 27017 block karta hai — pehle mobile data.
         all.forEach { network ->
             addIf(network) { caps ->
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
                     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             }
         }
         addIf(cm.activeNetwork) { caps ->
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
         }
         all.forEach { network ->
             addIf(network) { caps ->
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            }
+        }
+        all.forEach { network ->
+            addIf(network) { caps ->
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
                     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             }
         }
@@ -105,17 +130,92 @@ object MongoSyncHelper {
         return ordered
     }
 
-    private fun <T> runWithTimeout(label: String, block: () -> T): T? {
-        val future = httpExecutor.submit(Callable { block() })
+    private fun acquireCellularNetwork(): Network? {
+        val existing = candidateNetworks().firstOrNull { isCellular(it) }
+        if (existing != null) {
+            return existing
+        }
+
+        val cm = connectivity() ?: return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return null
+        }
+
+        val found = AtomicReference<Network?>(null)
+        val latch = CountDownLatch(1)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                found.set(network)
+                latch.countDown()
+            }
+
+            override fun onUnavailable() {
+                latch.countDown()
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
         return try {
-            future.get(TIMEOUT_MS + 3000L, TimeUnit.MILLISECONDS)
-        } catch (_: TimeoutException) {
-            future.cancel(true)
-            Log.e(TAG, "$label timed out")
-            null
+            cellularCallback = callback
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                cm.requestNetwork(request, callback, CELLULAR_WAIT_MS.toInt())
+            } else {
+                cm.requestNetwork(request, callback)
+            }
+            latch.await(CELLULAR_WAIT_MS, TimeUnit.MILLISECONDS)
+            found.get()?.also {
+                Log.d(TAG, "Cellular network acquired for sync")
+            }
         } catch (error: Exception) {
-            Log.e(TAG, "$label failed: ${error.message}")
+            Log.w(TAG, "Cellular request failed: ${error.message}")
+            releaseCellularNetwork()
             null
+        }
+    }
+
+    private fun releaseCellularNetwork() {
+        val cm = connectivity() ?: return
+        val callback = cellularCallback ?: return
+        cellularCallback = null
+        try {
+            cm.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+            // already unregistered
+        }
+    }
+
+    private fun withBoundNetwork(network: Network?, label: String, block: () -> Boolean): Boolean {
+        val cm = connectivity()
+        synchronized(httpLock) {
+            val previous = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                try {
+                    cm?.boundNetworkForProcess
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
+
+            try {
+                if (network != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    cm?.bindProcessToNetwork(network)
+                    Log.d(TAG, "Bound process to $label")
+                }
+                return block()
+            } finally {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        cm?.bindProcessToNetwork(previous)
+                    } catch (_: Exception) {
+                        cm?.bindProcessToNetwork(null)
+                    }
+                }
+            }
         }
     }
 
@@ -142,7 +242,7 @@ object MongoSyncHelper {
             Log.d(TAG, "Synced via Atlas Data API")
             return true
         }
-        if (direct()) {
+        if (!AtlasDirectSync.isUnreachable() && direct()) {
             Log.d(TAG, "Synced via Atlas Direct")
             return true
         }
@@ -433,36 +533,79 @@ object MongoSyncHelper {
         return allSuccess
     }
 
-    private fun getJson(url: String): JSONObject {
-        val networks = candidateNetworks().map { it as Network? } + null
-        for (network in networks.distinct()) {
-            val result = runWithTimeout("GET $url") {
-                getJsonOnce(url, network)
+    private fun isCertFailure(error: Exception): Boolean {
+        var cause: Throwable? = error
+        while (cause != null) {
+            if (cause is SSLHandshakeException) {
+                return true
             }
-            if (result != null) {
-                return result
+            val msg = cause.message ?: ""
+            if (msg.contains("Trust anchor", ignoreCase = true) ||
+                msg.contains("CertPathValidator", ignoreCase = true)
+            ) {
+                return true
             }
+            cause = cause.cause
         }
-        return JSONObject()
+        return false
     }
 
-    private fun openConnection(url: String, network: Network?): HttpURLConnection {
-        val parsed = URL(url)
-        return if (network != null) {
-            network.openConnection(parsed) as HttpURLConnection
-        } else {
-            parsed.openConnection() as HttpURLConnection
+    private fun forEachNetwork(block: (label: String) -> Boolean): Boolean {
+        var skipWifi = false
+        val networks = mutableListOf<Network?>()
+        networks.addAll(candidateNetworks())
+        if (networks.none { it != null && isCellular(it) }) {
+            acquireCellularNetwork()?.let { networks.add(0, it) }
         }
-    }
+        networks.add(null)
 
-    private fun getJsonOnce(url: String, network: Network?): JSONObject {
-        var connection: HttpURLConnection? = null
         try {
-            val label = network?.let { n ->
-                connectivity()?.let { networkLabel(it, n) }
-            } ?: "default"
+            for (network in networks.distinct()) {
+                if (skipWifi && network != null && isWifi(network)) {
+                    continue
+                }
+                val label = network?.let { n ->
+                    connectivity()?.let { networkLabel(it, n) }
+                } ?: "default"
+                lastCertFailure = false
+                val ok = withBoundNetwork(network, label) { block(label) }
+                if (ok) {
+                    return true
+                }
+                if (lastCertFailure && network != null && isWifi(network)) {
+                    Log.w(TAG, "WiFi SSL MITM — skipping wifi, trying cellular")
+                    skipWifi = true
+                }
+            }
+            return false
+        } finally {
+            releaseCellularNetwork()
+        }
+    }
+
+    private fun getJson(url: String): JSONObject {
+        var found: JSONObject? = null
+        forEachNetwork { label ->
+            val body = getJsonOnce(url, label)
+            if (body != null) {
+                found = body
+                true
+            } else {
+                false
+            }
+        }
+        return found ?: JSONObject()
+    }
+
+    private fun openConnection(url: String): HttpURLConnection {
+        return URL(url).openConnection() as HttpURLConnection
+    }
+
+    private fun getJsonOnce(url: String, label: String): JSONObject? {
+        var connection: HttpURLConnection? = null
+        return try {
             Log.d(TAG, "GET $url via $label")
-            connection = openConnection(url, network).apply {
+            connection = openConnection(url).apply {
                 requestMethod = "GET"
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
@@ -473,7 +616,11 @@ object MongoSyncHelper {
                 connection.errorStream
             }
             val body = BufferedReader(InputStreamReader(stream)).use { it.readText() }
-            return JSONObject(body.ifBlank { "{}" })
+            JSONObject(body.ifBlank { "{}" })
+        } catch (error: Exception) {
+            lastCertFailure = isCertFailure(error)
+            Log.e(TAG, "GET failed ($url) via $label: ${error.message}")
+            null
         } finally {
             connection?.disconnect()
         }
@@ -481,26 +628,14 @@ object MongoSyncHelper {
 
     private fun postJson(url: String, body: Map<String, Any>): Boolean {
         val payload = mapToJsonObject(body).toString()
-        val networks = candidateNetworks().map { it as Network? } + null
-        for (network in networks.distinct()) {
-            val result = runWithTimeout("POST $url") {
-                postJsonOnce(url, payload, network)
-            }
-            if (result == true) {
-                return true
-            }
-        }
-        return false
+        return forEachNetwork { label -> postJsonOnce(url, payload, label) }
     }
 
-    private fun postJsonOnce(url: String, payload: String, network: Network?): Boolean {
+    private fun postJsonOnce(url: String, payload: String, label: String): Boolean {
         var connection: HttpURLConnection? = null
-        val label = network?.let { n ->
-            connectivity()?.let { networkLabel(it, n) }
-        } ?: "default"
         return try {
             Log.d(TAG, "POST $url via $label")
-            connection = openConnection(url, network).apply {
+            connection = openConnection(url).apply {
                 requestMethod = "POST"
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
@@ -527,6 +662,7 @@ object MongoSyncHelper {
             }
             ok
         } catch (error: Exception) {
+            lastCertFailure = isCertFailure(error)
             Log.e(TAG, "POST failed ($url) via $label: ${error.message}")
             false
         } finally {

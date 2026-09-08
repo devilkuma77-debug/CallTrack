@@ -29,10 +29,24 @@ object DeviceRegistration {
             "appVersion" to BuildConfig.VERSION_NAME,
         )
 
-        var deviceOk = MongoSyncHelper.postApi(app, "/devices/register", payload)
+        var deviceOk = false
+        repeat(3) { attempt ->
+            deviceOk = MongoSyncHelper.postApi(app, "/devices/register", payload)
+            if (deviceOk) {
+                Log.d(TAG, "Device registered via HTTP: $deviceId / $simNumber")
+                return@repeat
+            }
+            if (attempt < 2) {
+                try {
+                    Thread.sleep(1500L * (attempt + 1))
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
+        }
         if (deviceOk) {
-            Log.d(TAG, "Device registered via HTTP: $deviceId / $simNumber")
-        } else if (AtlasDirectSync.isConfigured()) {
+            // already logged
+        } else if (AtlasDirectSync.isConfigured() && !AtlasDirectSync.isUnreachable()) {
             deviceOk = AtlasDirectSync.registerDevice(
                 deviceId,
                 simNumber,
