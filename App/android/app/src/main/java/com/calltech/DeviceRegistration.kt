@@ -29,9 +29,21 @@ object DeviceRegistration {
             "appVersion" to BuildConfig.VERSION_NAME,
         )
 
-        val deviceOk = MongoSyncHelper.postApi(app, "/devices/register", payload)
+        var deviceOk = MongoSyncHelper.postApi(app, "/devices/register", payload)
         if (deviceOk) {
             Log.d(TAG, "Device registered via HTTP: $deviceId / $simNumber")
+        } else if (AtlasDirectSync.isConfigured()) {
+            deviceOk = AtlasDirectSync.registerDevice(
+                deviceId,
+                simNumber,
+                Build.MODEL ?: "unknown",
+                Build.MANUFACTURER ?: "unknown",
+            )
+            if (deviceOk) {
+                Log.d(TAG, "Device registered via Atlas Direct: $deviceId / $simNumber")
+            } else {
+                Log.e(TAG, "Device/SIM HTTP+Atlas register failed: $deviceId / $simNumber")
+            }
         } else {
             Log.e(TAG, "HTTP /devices/register failed: $deviceId / $simNumber")
         }

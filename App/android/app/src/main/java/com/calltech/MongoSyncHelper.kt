@@ -84,7 +84,6 @@ object MongoSyncHelper {
         } catch (_: Exception) {
             emptyArray()
         }
-
         all.forEach { network ->
             addIf(network) { caps ->
                 caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
@@ -92,8 +91,7 @@ object MongoSyncHelper {
             }
         }
         addIf(cm.activeNetwork) { caps ->
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         }
         all.forEach { network ->
             addIf(network) { caps ->
@@ -101,12 +99,9 @@ object MongoSyncHelper {
                     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             }
         }
-        all.forEach { network ->
-            addIf(network) { caps ->
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            }
+        addIf(cm.activeNetwork) { caps ->
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         }
-        addIf(cm.activeNetwork) { true }
         return ordered
     }
 
@@ -121,29 +116,6 @@ object MongoSyncHelper {
         } catch (error: Exception) {
             Log.e(TAG, "$label failed: ${error.message}")
             null
-        }
-    }
-
-    private fun bindNetwork(network: Network?): String {
-        val cm = connectivity() ?: return "default"
-        return try {
-            if (network != null) {
-                cm.bindProcessToNetwork(network)
-                networkLabel(cm, network)
-            } else {
-                cm.bindProcessToNetwork(null)
-                "default"
-            }
-        } catch (error: Exception) {
-            Log.w(TAG, "bindProcessToNetwork failed: ${error.message}")
-            "default"
-        }
-    }
-
-    private fun unbindNetwork() {
-        try {
-            connectivity()?.bindProcessToNetwork(null)
-        } catch (_: Exception) {
         }
     }
 
@@ -163,24 +135,18 @@ object MongoSyncHelper {
         dataApi: () -> Boolean,
         http: () -> Boolean,
     ): Boolean {
-        // Live Render HTTPS pehle — Admin yahi se data dekhta hai.
-        // Atlas TCP 27017 WiFi pe block/timeout ho sakta hai.
         if (http()) {
             return true
         }
-        Log.w(TAG, "HTTP sync failed — trying Atlas")
-
-        if (AtlasDataApiSync.isConfigured()) {
-            if (dataApi()) {
-                return true
-            }
-            Log.w(TAG, "Atlas Data API failed — trying Atlas direct")
-        }
-
-        if (AtlasDirectSync.isConfigured() && direct()) {
+        if (dataApi()) {
+            Log.d(TAG, "Synced via Atlas Data API")
             return true
         }
-
+        if (direct()) {
+            Log.d(TAG, "Synced via Atlas Direct")
+            return true
+        }
+        Log.w(TAG, "All sync channels failed")
         return false
     }
 
@@ -471,12 +437,7 @@ object MongoSyncHelper {
         val networks = candidateNetworks().map { it as Network? } + null
         for (network in networks.distinct()) {
             val result = runWithTimeout("GET $url") {
-                val label = bindNetwork(network)
-                try {
-                    getJsonOnce(url, label)
-                } finally {
-                    unbindNetwork()
-                }
+                getJsonOnce(url, network)
             }
             if (result != null) {
                 return result
@@ -485,11 +446,23 @@ object MongoSyncHelper {
         return JSONObject()
     }
 
-    private fun getJsonOnce(url: String, label: String): JSONObject {
+    private fun openConnection(url: String, network: Network?): HttpURLConnection {
+        val parsed = URL(url)
+        return if (network != null) {
+            network.openConnection(parsed) as HttpURLConnection
+        } else {
+            parsed.openConnection() as HttpURLConnection
+        }
+    }
+
+    private fun getJsonOnce(url: String, network: Network?): JSONObject {
         var connection: HttpURLConnection? = null
         try {
+            val label = network?.let { n ->
+                connectivity()?.let { networkLabel(it, n) }
+            } ?: "default"
             Log.d(TAG, "GET $url via $label")
-            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connection = openConnection(url, network).apply {
                 requestMethod = "GET"
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
@@ -511,12 +484,7 @@ object MongoSyncHelper {
         val networks = candidateNetworks().map { it as Network? } + null
         for (network in networks.distinct()) {
             val result = runWithTimeout("POST $url") {
-                val label = bindNetwork(network)
-                try {
-                    postJsonOnce(url, payload, label)
-                } finally {
-                    unbindNetwork()
-                }
+                postJsonOnce(url, payload, network)
             }
             if (result == true) {
                 return true
@@ -525,11 +493,14 @@ object MongoSyncHelper {
         return false
     }
 
-    private fun postJsonOnce(url: String, payload: String, label: String): Boolean {
+    private fun postJsonOnce(url: String, payload: String, network: Network?): Boolean {
         var connection: HttpURLConnection? = null
+        val label = network?.let { n ->
+            connectivity()?.let { networkLabel(it, n) }
+        } ?: "default"
         return try {
             Log.d(TAG, "POST $url via $label")
-            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connection = openConnection(url, network).apply {
                 requestMethod = "POST"
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS

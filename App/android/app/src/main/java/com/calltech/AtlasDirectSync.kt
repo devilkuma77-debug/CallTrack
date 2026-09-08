@@ -159,6 +159,7 @@ object AtlasDirectSync {
                 "simNumber" to simNumber,
                 "model" to model,
                 "manufacturer" to manufacturer,
+                "appVersion" to BuildConfig.VERSION_NAME,
                 "updatedAt" to Date(),
             )).append("registeredAt", Date())
 
