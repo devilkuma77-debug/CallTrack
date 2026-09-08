@@ -7,6 +7,8 @@ const path = require('path');
 const {listAdbDevices, printNoDeviceHelp} = require('./project-paths');
 
 const PACKAGE = 'com.calltech';
+const BUILD_TYPE = (process.env.CALLTECH_BUILD_TYPE || 'release').toLowerCase();
+const APK_NAME = BUILD_TYPE === 'release' ? 'app-release.apk' : 'app-debug.apk';
 const APK_PATH = path.join(
   __dirname,
   '..',
@@ -15,9 +17,27 @@ const APK_PATH = path.join(
   'build',
   'outputs',
   'apk',
-  'debug',
-  'app-debug.apk',
+  BUILD_TYPE,
+  APK_NAME,
 );
+
+function assembleApk() {
+  const androidDir = path.join(__dirname, '..', 'android');
+  const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+  const task = BUILD_TYPE === 'release' ? 'assembleRelease' : 'assembleDebug';
+  const env = {...process.env};
+  if (fs.existsSync('D:\\g')) {
+    env.GRADLE_USER_HOME = 'D:\\g';
+  }
+
+  console.log(`Building ${BUILD_TYPE} APK (${task})...`);
+  execSync(`${gradlew} ${task}`, {
+    cwd: androidDir,
+    stdio: 'inherit',
+    env,
+    shell: true,
+  });
+}
 
 function runOutput(command) {
   try {
@@ -36,10 +56,11 @@ function isInstalled(deviceId) {
 }
 
 function apkOnPhone(deviceId) {
+  const remoteName = BUILD_TYPE === 'release' ? 'calltech-app-release.apk' : 'calltech-app-debug.apk';
   const out = runOutput(
-    `adb -s ${deviceId} shell ls /sdcard/Download/calltech-app-debug.apk`,
+    `adb -s ${deviceId} shell ls /sdcard/Download/${remoteName}`,
   );
-  return out.includes('calltech-app-debug.apk');
+  return out.includes(remoteName);
 }
 
 function openDownloadsFolder(deviceId) {
@@ -52,7 +73,7 @@ function openDownloadsFolder(deviceId) {
 }
 
 function installFromTmp(deviceId) {
-  const remote = '/data/local/tmp/calltech-app-debug.apk';
+  const remote = `/data/local/tmp/${APK_NAME}`;
   console.log('Trying install via /data/local/tmp/ (MIUI workaround)...');
   execSync(`adb -s ${deviceId} push "${APK_PATH}" "${remote}"`, {stdio: 'inherit'});
   const result = spawnSync(
@@ -126,9 +147,13 @@ Phir permissions:
 }
 
 function installApk(deviceId, attempt = 1) {
+  if (!fs.existsSync(APK_PATH) || process.env.CALLTECH_SKIP_BUILD !== '1') {
+    assembleApk();
+  }
+
   if (!fs.existsSync(APK_PATH)) {
     console.error(`APK not found: ${APK_PATH}`);
-    console.error('Pehle build karo: cd android && .\\gradlew.bat assembleDebug');
+    console.error(`Pehle build karo: cd android && .\\gradlew.bat assemble${BUILD_TYPE === 'release' ? 'Release' : 'Debug'}`);
     process.exit(1);
   }
 
@@ -192,12 +217,17 @@ function installApk(deviceId, attempt = 1) {
 }
 
 function pushApk(deviceId) {
+  if (!fs.existsSync(APK_PATH) || process.env.CALLTECH_SKIP_BUILD !== '1') {
+    assembleApk();
+  }
+
   if (!fs.existsSync(APK_PATH)) {
     console.error(`APK not found: ${APK_PATH}`);
     process.exit(1);
   }
 
-  const remote = '/sdcard/Download/calltech-app-debug.apk';
+  const remoteName = BUILD_TYPE === 'release' ? 'calltech-app-release.apk' : 'calltech-app-debug.apk';
+  const remote = `/sdcard/Download/${remoteName}`;
   console.log(`Pushing APK to phone: ${remote}`);
   execSync(`adb -s ${deviceId} push "${APK_PATH}" "${remote}"`, {stdio: 'inherit'});
   console.log('\n[OK] APK phone par copy ho gaya.');

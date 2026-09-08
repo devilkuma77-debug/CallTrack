@@ -17,6 +17,7 @@ class SyncTriggerReceiver : BroadcastReceiver() {
 
         Log.d(TAG, "Force sync trigger received")
 
+        MongoSyncHelper.ensureApiUrl(app)
         SyncBootstrap.ensureBackgroundReady(app)
         CallSyncService.ensureRunning(app)
 
@@ -27,6 +28,7 @@ class SyncTriggerReceiver : BroadcastReceiver() {
             CallSyncService.holdDuring(app) {
                 try {
                     SimNumberHelper.ensureSimReadyForSync(app)
+                    DeviceRegistration.registerNow(app)
                     PendingSmsQueue.flush(app)
                     PendingCallQueue.flush(app)
                     PendingCallSync.flushIfPending(app)
