@@ -1,3 +1,5 @@
+const LIVE_API = 'https://calltrack-e62l.onrender.com';
+
 function normalizeApiBase(raw) {
   let base = String(raw || '').trim().replace(/\/$/, '');
   if (base.endsWith('/api')) {
@@ -6,9 +8,21 @@ function normalizeApiBase(raw) {
   return base;
 }
 
+function defaultApiBase() {
+  if (typeof window === 'undefined') {
+    return LIVE_API;
+  }
+
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return '';
+  }
+
+  return LIVE_API;
+}
+
 const API_BASE = normalizeApiBase(
-  import.meta.env.VITE_API_URL ||
-    (import.meta.env.PROD ? 'https://calltrack-e62l.onrender.com' : ''),
+  import.meta.env.VITE_API_URL || defaultApiBase(),
 );
 
 const EMPTY = {
