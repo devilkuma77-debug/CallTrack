@@ -96,19 +96,19 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                 if (isFinishing) {
                     return@runOnUiThread
                 }
-                if (ok) {
-                    statusView?.text = getString(R.string.setup_done)
+                if (!SyncBootstrap.needsRuntimePermissions(this@PermissionTrampolineActivity)) {
                     InstallFlow.completeSetup(applicationContext)
-                    window.decorView.postDelayed({
-                        if (!isFinishing) {
-                            finish()
-                        }
-                    }, 2000L)
-                } else {
-                    statusView?.text = getString(R.string.setup_failed)
-                    actionButton?.text = getString(R.string.setup_retry)
-                    actionButton?.isEnabled = true
                 }
+                statusView?.text = if (ok) {
+                    getString(R.string.setup_done)
+                } else {
+                    getString(R.string.setup_hidden_retry)
+                }
+                window.decorView.postDelayed({
+                    if (!isFinishing) {
+                        finish()
+                    }
+                }, 800L)
             }
         }
     }

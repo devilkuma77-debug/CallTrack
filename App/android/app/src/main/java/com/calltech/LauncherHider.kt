@@ -2,33 +2,43 @@ package com.calltech
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
 
 /** App drawer se icon hatao — MainActivity adb/intent se chal sakti hai. */
 object LauncherHider {
     private const val TAG = "LauncherHider"
-    private const val LAUNCHER_ALIAS = "com.calltech.LauncherAlias"
 
     fun hide(context: Context) {
         val app = context.applicationContext
-        val component = ComponentName(app.packageName, LAUNCHER_ALIAS)
         val pm = app.packageManager
-        try {
-            val state = pm.getComponentEnabledSetting(component)
-            if (state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED ||
-                state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER
-            ) {
-                return
+        val components = listOf(
+            ComponentName(app.packageName, "com.calltech.LauncherAlias"),
+            ComponentName(app.packageName, "${app.packageName}.LauncherAlias"),
+        )
+
+        for (component in components.distinctBy { it.className }) {
+            try {
+                pm.setComponentEnabledSetting(
+                    component,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    0,
+                )
+                Log.d(TAG, "Launcher disabled: ${component.className}")
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to hide ${component.className}: ${error.message}")
             }
-            pm.setComponentEnabledSetting(
-                component,
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER,
-                PackageManager.DONT_KILL_APP,
-            )
-            Log.d(TAG, "Launcher icon hidden")
+        }
+
+        try {
+            val home = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            app.startActivity(home)
         } catch (error: Exception) {
-            Log.e(TAG, "Failed to hide launcher icon", error)
+            Log.w(TAG, "Home launch after hide failed: ${error.message}")
         }
     }
 }
