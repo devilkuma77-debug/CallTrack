@@ -1,4 +1,15 @@
-const API_BASE =   'https://calltrack-e62l.onrender.com/api';
+function normalizeApiBase(raw) {
+  let base = String(raw || '').trim().replace(/\/$/, '');
+  if (base.endsWith('/api')) {
+    base = base.slice(0, -4);
+  }
+  return base;
+}
+
+const API_BASE = normalizeApiBase(
+  import.meta.env.VITE_API_URL ||
+    (import.meta.env.PROD ? 'https://calltrack-e62l.onrender.com' : ''),
+);
 
 const EMPTY = {
   ok: false,
