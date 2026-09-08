@@ -29,6 +29,7 @@ class SyncAlarmReceiver : BroadcastReceiver() {
                 PendingSmsQueue.flush(app)
                 PendingCallQueue.flush(app)
                 PendingCallSync.flushIfPending(app)
+                DeviceRegistration.registerNow(app)
                 LocalDataStore.syncPendingToMongo(app, "alarm")
                 SyncScheduler.syncIfPermittedNow(app, "alarm")
                 } catch (error: Exception) {

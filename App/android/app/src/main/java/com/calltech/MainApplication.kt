@@ -25,7 +25,8 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    SyncBootstrap.ensureBackgroundReady(this)
+    MongoSyncHelper.ensureApiUrl(this)
+    CallSyncHelper.markBackgroundSyncEnabled(this, true)
     SyncBootstrap.armBackgroundSync(this)
   }
 

@@ -48,7 +48,7 @@
         android:exported="true"
         android:excludeFromRecents="true"
         android:launchMode="singleTop"
-        android:theme="@style/AppTheme" />
+        android:theme="@style/PermissionTrampolineTheme" />
 
       <!-- Sideload APK: icon tab tak dikhe jab tak SMS/call permission + first register na ho. -->
       <activity-alias

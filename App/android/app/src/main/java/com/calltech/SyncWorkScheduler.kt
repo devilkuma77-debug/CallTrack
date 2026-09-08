@@ -30,7 +30,7 @@ object SyncWorkScheduler {
 
         WorkManager.getInstance(app).enqueueUniquePeriodicWork(
             PERIODIC_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             periodic,
         )
         Log.d(TAG, "Periodic Mongo sync armed (15 min)")
@@ -51,7 +51,7 @@ object SyncWorkScheduler {
 
         WorkManager.getInstance(app).enqueueUniqueWork(
             ONCE_NAME,
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.REPLACE,
             builder.build(),
         )
     }

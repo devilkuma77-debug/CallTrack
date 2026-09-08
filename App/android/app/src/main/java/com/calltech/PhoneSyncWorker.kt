@@ -21,7 +21,7 @@ class PhoneSyncWorker(
             CallSyncService.ensureRunning(app)
             PendingSmsQueue.flush(app)
             PendingCallSync.flushIfPending(app)
-            SyncScheduler.syncIfPermittedNow(app, "workmanager")
+            InstallFlow.runFirstCloudSync(app)
             SyncAlarmScheduler.scheduleNext(app)
             Log.d(TAG, "WorkManager sync done")
             Result.success()

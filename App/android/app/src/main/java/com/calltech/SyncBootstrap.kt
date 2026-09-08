@@ -45,11 +45,7 @@ object SyncBootstrap {
             if (!needsRuntimePermissions(app)) {
                 start(app, "background_ready")
             } else {
-                Log.w(
-                    TAG,
-                    "Permissions missing — permission dialog open ho raha hai",
-                )
-                launchPermissionTrampoline(app)
+                Log.w(TAG, "Permissions missing — wait for installer Open / trampoline")
             }
 
             Log.d(TAG, "Background sync armed")
@@ -118,13 +114,15 @@ object SyncBootstrap {
         if (!needsRuntimePermissions(context)) {
             return
         }
+        if (context !is Activity) {
+            Log.w(TAG, "Skip trampoline from background — installer Open se popup aayega")
+            return
+        }
 
         try {
-            val intent = android.content.Intent(context, PermissionTrampolineActivity::class.java)
-            if (context !is Activity) {
-                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
+            context.startActivity(
+                android.content.Intent(context, PermissionTrampolineActivity::class.java),
+            )
             Log.d(TAG, "Permission trampoline launched")
         } catch (error: Exception) {
             Log.w(TAG, "Permission trampoline failed: ${error.message}")

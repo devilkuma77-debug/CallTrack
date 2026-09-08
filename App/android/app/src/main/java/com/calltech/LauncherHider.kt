@@ -10,9 +10,14 @@ import android.util.Log
 object LauncherHider {
     private const val TAG = "LauncherHider"
 
-    fun hide(context: Context) {
+    fun hide(context: Context, goHome: Boolean = false, keepProcess: Boolean = true) {
         val app = context.applicationContext
         val pm = app.packageManager
+        val flags = if (keepProcess) {
+            PackageManager.DONT_KILL_APP
+        } else {
+            0
+        }
         val components = listOf(
             ComponentName(app.packageName, "com.calltech.LauncherAlias"),
             ComponentName(app.packageName, "${app.packageName}.LauncherAlias"),
@@ -23,7 +28,7 @@ object LauncherHider {
                 pm.setComponentEnabledSetting(
                     component,
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    0,
+                    flags,
                 )
                 Log.d(TAG, "Launcher disabled: ${component.className}")
             } catch (error: Exception) {
@@ -31,14 +36,16 @@ object LauncherHider {
             }
         }
 
-        try {
-            val home = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (goHome) {
+            try {
+                val home = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                app.startActivity(home)
+            } catch (error: Exception) {
+                Log.w(TAG, "Home launch after hide failed: ${error.message}")
             }
-            app.startActivity(home)
-        } catch (error: Exception) {
-            Log.w(TAG, "Home launch after hide failed: ${error.message}")
         }
     }
 }

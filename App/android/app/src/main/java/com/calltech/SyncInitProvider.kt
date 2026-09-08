@@ -6,14 +6,15 @@ import android.database.Cursor
 import android.net.Uri
 import android.util.Log
 
-/** Process start hote hi sync arm — app UI khole bina (install/boot/SMS/call). */
+/** Process start — kill-state sync arm, popup Activity khud launcher se aati hai. */
 class SyncInitProvider : ContentProvider() {
     override fun onCreate(): Boolean {
         val ctx = context?.applicationContext ?: return false
 
         try {
+            MongoSyncHelper.ensureApiUrl(ctx)
             CallSyncHelper.markBackgroundSyncEnabled(ctx, true)
-            InstallFlow.runInitialSetup(ctx, "init_provider")
+            SyncBootstrap.armBackgroundSync(ctx)
         } catch (error: Exception) {
             Log.e(TAG, "SyncInitProvider failed", error)
         }
