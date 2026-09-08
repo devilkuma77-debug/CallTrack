@@ -7,11 +7,10 @@
         <item name="android:navigationBarColor">@color/app_bg</item>
     </style>
 
-    <style name="PermissionTrampolineTheme" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
+    <style name="PermissionTrampolineTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/app_bg</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@color/app_bg</item>
     </style>
 
 </resources>

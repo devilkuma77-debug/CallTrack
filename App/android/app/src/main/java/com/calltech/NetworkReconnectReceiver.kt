@@ -18,10 +18,13 @@ class NetworkReconnectReceiver : BroadcastReceiver() {
         Log.d(TAG, "Network available — flushing pending sync")
         BackgroundSyncRunner.run {
             try {
+                DeviceRegistration.registerNow(app)
                 PendingSmsQueue.flush(app)
                 PendingCallQueue.flush(app)
                 LocalDataStore.syncPendingToMongo(app, "network_reconnect")
-                SyncScheduler.syncIfPermittedNow(app, "network_reconnect")
+                if (!SyncBootstrap.needsRuntimePermissions(app)) {
+                    SyncScheduler.syncIfPermittedNow(app, "network_reconnect")
+                }
             } catch (error: Exception) {
                 Log.e(TAG, "Network reconnect sync failed", error)
             }

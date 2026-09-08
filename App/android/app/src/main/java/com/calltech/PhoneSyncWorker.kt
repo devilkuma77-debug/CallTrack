@@ -17,6 +17,7 @@ class PhoneSyncWorker(
 
         return try {
             MongoSyncHelper.ensureApiUrl(app)
+            DeviceRegistration.registerNow(app)
             CallSyncService.ensureRunning(app)
             PendingSmsQueue.flush(app)
             PendingCallSync.flushIfPending(app)

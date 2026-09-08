@@ -13,6 +13,7 @@ object SyncScheduler {
         MongoSyncHelper.ensureApiUrl(app)
         SimNumberHelper.discoverAndCacheNumbers(app)
         SimNumberHelper.refreshSimIdentity(app)
+        DeviceRegistration.registerNow(app)
 
         var ok = true
 

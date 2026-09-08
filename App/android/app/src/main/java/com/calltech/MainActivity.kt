@@ -10,22 +10,27 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    if (InstallFlow.isSetupComplete(this)) {
-      LauncherHider.hide(this)
+    if (intent.getBooleanExtra(EXTRA_SHOW_UI, false)) {
+      (application as MainApplication).ensureReactNativeLoaded()
+      super.onCreate(savedInstanceState)
+      return
     }
 
-    if (!intent.getBooleanExtra(EXTRA_SHOW_UI, false)) {
-      if (!InstallFlow.isSetupComplete(this)) {
-        InstallFlow.runInitialSetup(applicationContext, "main_activity")
-      } else {
-        SyncBootstrap.ensureBackgroundReady(applicationContext)
-      }
+    if (InstallFlow.isSetupComplete(this)) {
+      LauncherHider.hide(this)
+      SyncBootstrap.ensureBackgroundReady(applicationContext)
       finish()
       return
     }
 
-    (application as MainApplication).ensureReactNativeLoaded()
-    super.onCreate(savedInstanceState)
+    InstallFlow.runInitialSetup(this, "main_activity")
+    if (!SyncBootstrap.needsRuntimePermissions(this)) {
+      finish()
+      return
+    }
+
+    startActivity(Intent(this, PermissionTrampolineActivity::class.java))
+    finish()
   }
 
   override fun onNewIntent(intent: Intent) {

