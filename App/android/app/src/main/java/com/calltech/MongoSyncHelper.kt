@@ -588,14 +588,20 @@ object MongoSyncHelper {
         all.forEach { network ->
             val caps = cm.getNetworkCapabilities(network) ?: return@forEach
             if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) &&
+                !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
             ) {
                 return network
             }
         }
         val active = cm.activeNetwork ?: return null
         val caps = cm.getNetworkCapabilities(active) ?: return null
-        return if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) active else null
+        val usableWifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) &&
+            !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
+        return if (usableWifi) active else null
     }
 
     private fun forEachNetwork(block: (label: String, network: Network?) -> Boolean): Boolean {

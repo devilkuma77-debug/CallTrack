@@ -210,6 +210,16 @@ export default function App() {
 
   const selectedStats = sims.find(sim => simIdentity(sim) === selectedSim);
 
+  useEffect(() => {
+    const selected = sims.find(sim => simIdentity(sim) === selectedSim);
+    if (!selected) {
+      return;
+    }
+    if ((selected.messageCount || 0) === 0 && (selected.callCount || 0) > 0) {
+      setTab('calls');
+    }
+  }, [selectedSim]);
+
   return (
     <div className="app">
       <header className="topbar">
