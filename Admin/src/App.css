@@ -175,6 +175,13 @@
   color: var(--ink-soft);
 }
 
+.sim-device {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .main {
   padding: 24px;
 }

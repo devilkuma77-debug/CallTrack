@@ -2,10 +2,12 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   deleteSim,
   getCallLogs,
+  getDevices,
   getHealth,
   getMessages,
   getSims,
   getStats,
+  mergeSimsWithDevices,
   simIdentity,
 } from './api';
 import './App.css';
@@ -76,13 +78,17 @@ export default function App() {
   const [error, setError] = useState('');
 
   const loadOverview = useCallback(async () => {
-    const [health, statsRes, simsRes] = await Promise.all([
+    const [health, statsRes, simsRes, devicesRes] = await Promise.all([
       getHealth().catch(() => ({ok: false})),
       getStats(),
       getSims(),
+      getDevices().catch(() => ({devices: []})),
     ]);
 
-    const simList = simsRes.sims || simsRes.devices || statsRes.sims || [];
+    const simList = mergeSimsWithDevices(
+      simsRes.sims || simsRes.devices || statsRes.sims || [],
+      devicesRes.devices || [],
+    );
     setHealthOk(Boolean(health.ok));
     setStats(statsRes);
     setSims(simList);
@@ -246,6 +252,13 @@ export default function App() {
                     <span className="sim-meta">
                       {sim.messageCount || 0} SMS · {sim.callCount || 0} calls
                     </span>
+                    {(sim.model || sim.appVersion) && (
+                      <span className="sim-device">
+                        {[sim.model, sim.appVersion ? `v${sim.appVersion}` : '']
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    )}
                   </button>
                   <button
                     className="sim-delete"
