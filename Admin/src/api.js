@@ -35,10 +35,23 @@ const EMPTY = {
   callCount: 0,
 };
 
-async function request(path) {
+async function request(path, options = {}) {
   try {
-    const response = await fetch(`${API_BASE}${path}`);
+    const method = String(options.method || 'GET').toUpperCase();
+    const headers = {...(options.headers || {})};
+    if (method !== 'GET' && method !== 'HEAD') {
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+    }
+
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      method,
+      headers,
+    });
     const data = await response.json().catch(() => ({}));
+    if (!response.ok && !data.error) {
+      return {...EMPTY, ...data, error: `HTTP ${response.status}`};
+    }
     return {...EMPTY, ...data};
   } catch (error) {
     return {
@@ -62,6 +75,13 @@ export function getSims() {
 
 export function getDevices() {
   return request('/api/devices');
+}
+
+export function deleteSim(identity) {
+  const query = new URLSearchParams({
+    simNumber: identity,
+  });
+  return request(`/api/sims?${query}`, {method: 'DELETE'});
 }
 
 export function getMessages(identity, limit = 200) {

@@ -119,11 +119,12 @@
 
 .sim-card {
   width: 100%;
-  text-align: left;
+  display: flex;
+  align-items: stretch;
   border: 1px solid var(--border);
   background: var(--white);
   border-radius: 12px;
-  padding: 12px;
+  overflow: hidden;
   transition: border-color 0.15s, background 0.15s;
 }
 
@@ -131,6 +132,34 @@
 .sim-card.active {
   border-color: var(--primary);
   background: var(--primary-soft);
+}
+
+.sim-card-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 12px;
+}
+
+.sim-delete {
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 12px;
+}
+
+.sim-delete:hover:not(:disabled) {
+  background: var(--red-soft);
+}
+
+.sim-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .sim-number {

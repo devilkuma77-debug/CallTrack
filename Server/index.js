@@ -16,6 +16,7 @@ const {
   getDeviceCollections,
   normalizeSimNumber,
   normalizeDeviceId,
+  sanitizeSimNumber,
   APP_DB,
 } = require('./simCollections');
 
@@ -140,7 +141,7 @@ app.get('/api/stats', requireMongo, async (req, res) => {
       });
     }
 
-    const prefixes = await listSimPrefixesInCalltech();
+    const prefixes = await listAllSimPrefixes();
     const deviceStats = await Promise.all(
       prefixes.map(prefix => countDeviceCollections(prefix)),
     );
@@ -157,9 +158,59 @@ app.get('/api/stats', requireMongo, async (req, res) => {
   }
 });
 
+async function listAllSimPrefixes() {
+  const prefixes = new Set(await listSimPrefixesInCalltech());
+
+  try {
+    const devices = await getClient().db(APP_DB).collection('devices').find({}).toArray();
+    for (const device of devices) {
+      const prefix = sanitizeSimNumber(device.simNumber || device.deviceId || '');
+      if (prefix && prefix !== 'unknown') {
+        prefixes.add(prefix);
+      }
+    }
+  } catch (_error) {
+    // devices collection optional
+  }
+
+  return [...prefixes].sort();
+}
+
+async function deleteSimData(identity) {
+  const collections = getSimCollections(identity);
+  const db = getClient().db(collections.database);
+  const names = await db.listCollections().toArray();
+  const existing = new Set(names.map(item => item.name));
+  const dropped = [];
+
+  for (const name of [collections.messages, collections.callLogs]) {
+    if (existing.has(name)) {
+      await db.collection(name).drop();
+      dropped.push(name);
+    }
+  }
+
+  const deviceResult = await db.collection('devices').deleteMany({
+    $or: [
+      {deviceId: collections.prefix},
+      {deviceId: identity},
+      {simNumber: identity},
+      {simNumber: collections.simNumber},
+      {simNumber: collections.prefix},
+    ],
+  });
+
+  return {
+    prefix: collections.prefix,
+    simNumber: collections.simNumber,
+    dropped,
+    devicesRemoved: deviceResult.deletedCount || 0,
+  };
+}
+
 app.get('/api/sims', requireMongo, async (_req, res) => {
   try {
-    const prefixes = await listSimPrefixesInCalltech();
+    const prefixes = await listAllSimPrefixes();
     const sims = await Promise.all(
       prefixes.map(prefix => countDeviceCollections(prefix)),
     );
@@ -169,6 +220,28 @@ app.get('/api/sims', requireMongo, async (_req, res) => {
       database: APP_DB,
       sims,
       devices: sims,
+    });
+  } catch (error) {
+    res.status(500).json({success: false, error: error.message});
+  }
+});
+
+app.delete('/api/sims', requireMongo, async (req, res) => {
+  try {
+    const identity = resolveIdentity({
+      query: req.query,
+      simNumber: req.body?.simNumber,
+      deviceId: req.body?.deviceId,
+    });
+
+    if (!identity) {
+      return res.status(400).json({success: false, error: 'simNumber required'});
+    }
+
+    const result = await deleteSimData(identity);
+    res.json({
+      success: true,
+      ...result,
     });
   } catch (error) {
     res.status(500).json({success: false, error: error.message});

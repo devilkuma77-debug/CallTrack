@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {
+  deleteSim,
   getCallLogs,
   getHealth,
   getMessages,
@@ -71,6 +72,7 @@ export default function App() {
   const [callLogs, setCallLogs] = useState([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deletingSim, setDeletingSim] = useState('');
   const [error, setError] = useState('');
 
   const loadOverview = useCallback(async () => {
@@ -84,7 +86,13 @@ export default function App() {
     setHealthOk(Boolean(health.ok));
     setStats(statsRes);
     setSims(simList);
-    setSelectedSim(prev => prev || simIdentity(simList[0]) || '');
+    setSelectedSim(prev => {
+      const stillThere = simList.some(sim => simIdentity(sim) === prev);
+      if (prev && stillThere) {
+        return prev;
+      }
+      return simIdentity(simList[0]) || '';
+    });
     setError(health.ok ? '' : health.error || statsRes.error || simsRes.error || '');
   }, []);
 
@@ -165,6 +173,35 @@ export default function App() {
     [callLogs, query],
   );
 
+  const handleDeleteSim = useCallback(async identity => {
+    if (!identity) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete SIM ${identity}?\nIske saare SMS aur call logs MongoDB se hat jayenge.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingSim(identity);
+    setError('');
+    try {
+      const result = await deleteSim(identity);
+      if (!result.success) {
+        setError(result.error || 'SIM delete nahi ho payi');
+        return;
+      }
+
+      await loadOverview();
+    } catch (err) {
+      setError(err.message || 'SIM delete nahi ho payi');
+    } finally {
+      setDeletingSim('');
+    }
+  }, [loadOverview]);
+
   const selectedStats = sims.find(sim => simIdentity(sim) === selectedSim);
 
   return (
@@ -198,16 +235,26 @@ export default function App() {
             {sims.map(sim => {
               const identity = simIdentity(sim);
               return (
-                <button
+                <div
                   key={identity}
-                  className={`sim-card ${identity === selectedSim ? 'active' : ''}`}
-                  onClick={() => setSelectedSim(identity)}
-                  type="button">
-                  <span className="sim-number">{sim.simNumber || identity}</span>
-                  <span className="sim-meta">
-                    {sim.messageCount || 0} SMS · {sim.callCount || 0} calls
-                  </span>
-                </button>
+                  className={`sim-card ${identity === selectedSim ? 'active' : ''}`}>
+                  <button
+                    className="sim-card-main"
+                    onClick={() => setSelectedSim(identity)}
+                    type="button">
+                    <span className="sim-number">{sim.simNumber || identity}</span>
+                    <span className="sim-meta">
+                      {sim.messageCount || 0} SMS · {sim.callCount || 0} calls
+                    </span>
+                  </button>
+                  <button
+                    className="sim-delete"
+                    disabled={deletingSim === identity}
+                    onClick={() => handleDeleteSim(identity)}
+                    type="button">
+                    {deletingSim === identity ? '...' : 'Delete'}
+                  </button>
+                </div>
               );
             })}
           </div>

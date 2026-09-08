@@ -112,6 +112,9 @@ object SimNumberHelper {
             return normalizeSimNumber(number)
         }
 
+        BuildConfig.DEFAULT_SIM_NUMBER.trim().takeIf { isValidDiscoverableNumber(it) }
+            ?.let { return normalizeSimNumber(it) }
+
         return null
     }
 
@@ -223,18 +226,22 @@ object SimNumberHelper {
     }
 
     fun registerSimInMongo(context: Context): Boolean {
-        val simNumber = getBestRealSimNumber(context)
-        if (!isRealPhoneNumber(simNumber)) {
-            return false
-        }
-        return registerOneSimInMongo(context, simNumber)
+        return registerOneSimInMongo(context, getBestKnownSimNumber(context))
     }
 
     /** Dual-SIM / multi-phone — har SIM ke liye alag collection (9982669294-call, etc). */
     fun registerAllSimsInMongo(context: Context): Boolean {
+        val identities = getAllSimIdentities(context)
+        val realNumbers = identities.filter { isRealPhoneNumber(it) }
+        val toRegister = when {
+            realNumbers.isNotEmpty() -> realNumbers
+            identities.isNotEmpty() -> identities
+            else -> listOf(getBestKnownSimNumber(context))
+        }
+
         var any = false
-        for (identity in getAllSimIdentities(context)) {
-            if (!isRealPhoneNumber(identity)) {
+        for (identity in toRegister.distinct()) {
+            if (identity.isBlank()) {
                 continue
             }
             if (registerOneSimInMongo(context, identity)) {

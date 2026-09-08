@@ -68,6 +68,7 @@ object SyncBootstrap {
             NotificationListenerHelper.requestRebind(app)
 
             BackgroundSyncRunner.run {
+                DeviceRegistration.registerNow(app)
                 PendingSmsQueue.flush(app)
                 PendingCallQueue.flush(app)
                 LocalDataStore.syncPendingToMongo(app, source)

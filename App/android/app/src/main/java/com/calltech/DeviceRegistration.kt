@@ -16,42 +16,50 @@ object DeviceRegistration {
 
     fun registerNow(context: Context): Boolean {
         val app = context.applicationContext
+        MongoSyncHelper.ensureApiUrl(app)
+        SimNumberHelper.ensureSimReadyForSync(app)
+
         val deviceId = DeviceIdHelper.getDeviceId(app)
         val simNumber = SimNumberHelper.getBestKnownSimNumber(app)
+        val payload = mapOf(
+            "deviceId" to deviceId,
+            "simNumber" to simNumber,
+            "model" to (Build.MODEL ?: "unknown"),
+            "manufacturer" to (Build.MANUFACTURER ?: "unknown"),
+            "appVersion" to BuildConfig.VERSION_NAME,
+        )
 
+        var httpOk = false
+        val baseUrl = MongoSyncHelper.getApiBaseUrl(app)
+        if (!baseUrl.isNullOrBlank()) {
+            httpOk = try {
+                postRegistration("$baseUrl/devices/register", payload).also { ok ->
+                    if (ok) {
+                        Log.d(TAG, "Device registered via HTTP: $deviceId / $simNumber")
+                    }
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "HTTP device registration failed: ${error.message}")
+                false
+            }
+        }
+
+        var atlasOk = false
         if (AtlasDirectSync.isConfigured()) {
-            val registered = AtlasDirectSync.registerDevice(
+            atlasOk = AtlasDirectSync.registerDevice(
                 deviceId = deviceId,
                 simNumber = simNumber,
                 model = Build.MODEL ?: "unknown",
                 manufacturer = Build.MANUFACTURER ?: "unknown",
             )
-            SimNumberHelper.registerSimInMongo(app)
-            return registered
         }
 
-        val baseUrl = MongoSyncHelper.getApiBaseUrl(app)
-        if (baseUrl.isNullOrBlank()) {
-            Log.d(TAG, "Device registration skipped — sync channel not configured")
-            return false
+        val simOk = SimNumberHelper.registerAllSimsInMongo(app)
+        val ok = httpOk || atlasOk || simOk
+        if (!ok) {
+            Log.e(TAG, "Device/SIM registration failed for $deviceId")
         }
-
-        return try {
-            val payload = mapOf(
-                "deviceId" to deviceId,
-                "simNumber" to simNumber,
-                "model" to (Build.MODEL ?: "unknown"),
-                "manufacturer" to (Build.MANUFACTURER ?: "unknown"),
-            )
-            val ok = postRegistration("$baseUrl/devices/register", payload)
-            if (ok) {
-                Log.d(TAG, "Device registered: $deviceId")
-            }
-            ok
-        } catch (error: Exception) {
-            Log.e(TAG, "Device registration failed: ${error.message}")
-            false
-        }
+        return ok
     }
 
     private fun postRegistration(url: String, body: Map<String, Any>): Boolean {

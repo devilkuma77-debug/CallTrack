@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import {AppState, DeviceEventEmitter, InteractionManager} from 'react-native';
 
+import {MONGO_API_URL} from '../config/mongoConfig';
 import {
   configureNativeMongoApi,
   runAutoCloudSync,
@@ -85,7 +86,7 @@ export function MessageRealtimeProvider({children}) {
     syncing.current = true;
 
     try {
-      await configureNativeMongoApi('');
+      await configureNativeMongoApi(MONGO_API_URL);
       const result = await runAutoCloudSync();
       setMongoLive(Boolean(result?.serverOnline || result?.success));
       await refreshFromPhone(true);

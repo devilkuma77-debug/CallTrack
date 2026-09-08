@@ -7,6 +7,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import {MessageRealtimeProvider} from './src/context/MessageRealtimeContext';
 import {theme} from './src/theme/theme';
+import {MONGO_API_URL} from './src/config/mongoConfig';
 import {
   configureNativeMongoApi,
   fetchNativeAtlasStats,
@@ -40,7 +41,7 @@ function BootScreen() {
 function runStartupSync() {
   (async () => {
     try {
-      await configureNativeMongoApi('');
+      await configureNativeMongoApi(MONGO_API_URL);
       await startBackgroundCallSync();
       runAutoCloudSync().catch(() => {});
 

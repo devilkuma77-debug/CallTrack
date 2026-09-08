@@ -14,19 +14,29 @@ object MongoSyncHelper {
     private const val TAG = "MongoSyncHelper"
     private const val PREFS = "calltech_mongo"
     private const val KEY_API_BASE = "mongo_api_base"
+    private const val LIVE_SYNC_API = "https://calltrack-e62l.onrender.com/api"
     private const val TIMEOUT_MS = 45000
     private const val BATCH_SIZE = 150
 
+    private fun isPublicHttps(url: String): Boolean {
+        val value = url.trim().lowercase()
+        return value.startsWith("https://") &&
+            !value.contains("localhost") &&
+            !value.contains("127.0.0.1")
+    }
+
+    private fun preferredApiUrl(): String {
+        val fromBuild = BuildConfig.SYNC_API_URL.trim()
+        return if (isPublicHttps(fromBuild)) fromBuild.trimEnd('/') else LIVE_SYNC_API
+    }
+
     fun ensureApiUrl(context: Context) {
         val app = context.applicationContext
-        if (!getApiBaseUrl(app).isNullOrBlank()) {
-            return
-        }
-
-        val fromBuild = BuildConfig.SYNC_API_URL.trim()
-        if (fromBuild.isNotBlank()) {
-            setApiBaseUrl(app, fromBuild)
-            Log.d(TAG, "Sync API URL from build config")
+        val preferred = preferredApiUrl()
+        val current = getApiBaseUrl(app)
+        if (current != preferred) {
+            setApiBaseUrl(app, preferred)
+            Log.d(TAG, "Sync API URL set to $preferred")
         }
     }
 
@@ -46,7 +56,13 @@ object MongoSyncHelper {
         dataApi: () -> Boolean,
         http: () -> Boolean,
     ): Boolean {
-        // Phone mobile data par Atlas chalega; LAN HTTP pehle timeout karta tha.
+        // Live Render HTTPS pehle — Admin yahi se data dekhta hai.
+        // Atlas TCP 27017 WiFi pe block/timeout ho sakta hai.
+        if (http()) {
+            return true
+        }
+        Log.w(TAG, "HTTP sync failed — trying Atlas")
+
         if (AtlasDataApiSync.isConfigured()) {
             if (dataApi()) {
                 return true
@@ -54,14 +70,7 @@ object MongoSyncHelper {
             Log.w(TAG, "Atlas Data API failed — trying Atlas direct")
         }
 
-        if (AtlasDirectSync.isConfigured()) {
-            if (direct()) {
-                return true
-            }
-            Log.w(TAG, "Direct Atlas failed — trying HTTP")
-        }
-
-        if (http()) {
+        if (AtlasDirectSync.isConfigured() && direct()) {
             return true
         }
 

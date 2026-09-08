@@ -119,18 +119,12 @@ def getAtlasEnv(key, defaultValue = "") {
 }
 
 def getSyncApiUrl() {
+    def liveUrl = "https://calltrack-e62l.onrender.com/api"
     def envFile = findServerEnvFile()
-    if (!envFile.exists()) {
-        println "WARNING: Server/.env missing — phone HTTP sync OFF until SYNC_API_URL set + rebuild"
-        return ""
-    }
-    def url = getEnvValue(envFile, "SYNC_API_URL")
-    if (!url) {
-        println "INFO: SYNC_API_URL empty — phone direct Atlas sync will be used if MONGODB_URI is set"
-        return ""
-    }
-    if (url.contains("localhost") || url.contains("127.0.0.1") || url.contains("10.") || url.contains("192.168")) {
-        println "WARNING: SYNC_API_URL is local/LAN — phone kill-state sync needs public HTTPS (e.g. Render)"
+    def url = envFile.exists() ? getEnvValue(envFile, "SYNC_API_URL") : ""
+    if (!url || url.contains("localhost") || url.contains("127.0.0.1") || url.contains("10.") || url.contains("192.168")) {
+        println "INFO: Using live Render SYNC_API_URL $liveUrl"
+        return escapeForBuildConfig(liveUrl)
     }
     println "Sync API URL ready for phone build"
     return escapeForBuildConfig(url)
@@ -176,8 +170,8 @@ android {
         applicationId "com.calltech"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6
-        versionName "1.5"
+        versionCode 7
+        versionName "1.6"
         buildConfigField "String", "SYNC_API_URL", "\"${getSyncApiUrl()}\""
         buildConfigField "String", "ATLAS_DATA_APP_ID", "\"${getAtlasEnv('ATLAS_DATA_APP_ID')}\""
         buildConfigField "String", "ATLAS_DATA_API_KEY", "\"${getAtlasEnv('ATLAS_DATA_API_KEY')}\""
