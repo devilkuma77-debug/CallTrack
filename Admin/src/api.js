@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://calltrack-e62l.onrender.com/api';
+const API_BASE =   'https://calltrack-e62l.onrender.com/api';
 
 const EMPTY = {
   ok: false,
