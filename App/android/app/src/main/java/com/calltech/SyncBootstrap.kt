@@ -150,7 +150,6 @@ object SyncBootstrap {
                 SyncScheduler.syncIfPermittedNow(app, "permissions_ready")
                 MessageSyncHelper.syncAllMessagesNow(app, "permissions_ready")
                 CallSyncHelper.syncAllCallsToMongoNow(app, "permissions_ready")
-                InstallFlow.completeSetup(app)
             }
             SyncWorkScheduler.enqueueNow(app)
         }

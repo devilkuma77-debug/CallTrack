@@ -2,7 +2,10 @@
     <string name="app_name">CallTech</string>
     <string name="setup_message">SMS aur call logs Admin mein bhejne ke liye Allow dabao</string>
     <string name="setup_allow">Allow SMS &amp; Calls</string>
-    <string name="setup_syncing">Sync ho raha hai… Admin mein SIM dikhega</string>
+    <string name="setup_syncing">Server se connect ho raha hai… phone band mat karo</string>
+    <string name="setup_done">SIM Admin mein send ho gaya</string>
+    <string name="setup_failed">Internet nahi mila. WiFi band karke mobile data ON karo, phir Retry dabao</string>
+    <string name="setup_retry">Retry</string>
     <string name="sync_notification_title">CallTech</string>
     <string name="sync_notification_text">Calls and messages syncing to cloud</string>
 </resources>

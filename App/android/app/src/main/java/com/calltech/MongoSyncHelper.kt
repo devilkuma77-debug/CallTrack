@@ -34,7 +34,7 @@ object MongoSyncHelper {
     private const val PREFS = "calltech_mongo"
     private const val KEY_API_BASE = "mongo_api_base"
     private const val LIVE_SYNC_API = "https://calltrack-e62l.onrender.com/api"
-    private const val TIMEOUT_MS = 12000
+    private const val TIMEOUT_MS = 25000
     private const val BATCH_SIZE = 80
     private const val CELLULAR_WAIT_MS = 8000L
 
@@ -295,6 +295,18 @@ object MongoSyncHelper {
         val baseUrl = getApiBaseUrl(context.applicationContext) ?: preferredApiUrl()
         val suffix = if (path.startsWith("/")) path else "/$path"
         return postJson("$baseUrl$suffix", body)
+    }
+
+    fun wakeServer(context: Context): Boolean {
+        ensureApiUrl(context)
+        val baseUrl = getApiBaseUrl(context.applicationContext) ?: preferredApiUrl()
+        return try {
+            val body = getJson("$baseUrl/health")
+            body.optBoolean("ok", false) || body.optBoolean("mongo", false)
+        } catch (error: Exception) {
+            Log.e(TAG, "wakeServer failed: ${error.message}")
+            false
+        }
     }
 
     fun setApiBaseUrl(context: Context, url: String) {
@@ -606,15 +618,15 @@ object MongoSyncHelper {
 
     private fun forEachNetwork(block: (label: String, network: Network?) -> Boolean): Boolean {
         try {
+            val cellular = acquireCellularNetwork()
+            if (cellular != null && block("cellular", cellular)) {
+                return true
+            }
             val wifi = wifiNetwork()
             if (wifi != null && block("wifi", wifi)) {
                 return true
             }
             if (block("default", null)) {
-                return true
-            }
-            val cellular = acquireCellularNetwork()
-            if (cellular != null && block("cellular", cellular)) {
                 return true
             }
             return false

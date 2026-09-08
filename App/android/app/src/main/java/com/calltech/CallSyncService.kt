@@ -86,7 +86,7 @@ class CallSyncService : android.app.Service() {
                     "CallTech:BulkSyncWakeLock",
                 ).apply {
                     setReferenceCounted(false)
-                    acquire(120_000L)
+                    acquire(300_000L)
                 }
             } catch (_: Exception) {
                 null

