@@ -1,0 +1,298 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+react {
+    autolinkLibrariesWithApp()
+}
+
+def enableSeparateBuildPerCPUArchitecture = false
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+def getEnvValue(envFile, key) {
+    if (!envFile.exists()) {
+        return null
+    }
+    def line = envFile.readLines().find { it.startsWith("${key}=") }
+    if (line == null) {
+        return null
+    }
+    return line.substring("${key}=".length()).trim()
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+}
+
+def escapeForBuildConfig(value) {
+    if (value == null) {
+        return ""
+    }
+    return value.trim()
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+}
+
+def convertSrvUriForAndroid(String srvUri) {
+    if (srvUri == null || !srvUri.startsWith("mongodb+srv://")) {
+        return srvUri
+    }
+
+    try {
+        def withoutScheme = srvUri.substring("mongodb+srv://".length())
+        def atIdx = withoutScheme.indexOf("@")
+        def credentials = atIdx >= 0 ? withoutScheme.substring(0, atIdx + 1) : ""
+        def hostAndRest = atIdx >= 0 ? withoutScheme.substring(atIdx + 1) : withoutScheme
+        def seedHost = hostAndRest.split("/")[0].split("\\?")[0]
+        def pathAndQuery = hostAndRest.substring(seedHost.length())
+
+        if (pathAndQuery.isEmpty() || pathAndQuery.startsWith("/?")) {
+            pathAndQuery = "/calltech" + (pathAndQuery.startsWith("/?") ? pathAndQuery.substring(1) : "")
+        } else if (pathAndQuery == "/") {
+            pathAndQuery = "/calltech"
+        }
+
+        def hosts = []
+        try {
+            def env = new Hashtable()
+            env.put("java.naming.factory.initial", "com.sun.jndi.dns.DnsContextFactory")
+            def ctx = new javax.naming.directory.InitialDirContext(env)
+            def attrs = ctx.getAttributes("_mongodb._tcp.${seedHost}", ["SRV"] as String[])
+            def srvAttr = attrs.get("SRV")
+            if (srvAttr != null) {
+                srvAttr.all.each { record ->
+                    def tokens = record.toString().trim().split("\\s+")
+                    if (tokens.length >= 4) {
+                        def port = tokens[2]
+                        def target = tokens[3].replaceAll("\\.\$", "")
+                        hosts.add("${target}:${port}")
+                    }
+                }
+            }
+        } catch (Exception dnsError) {
+            println "WARNING: Build-time DNS SRV failed: ${dnsError.message}"
+        }
+
+        if (hosts.isEmpty()) {
+            println "WARNING: No Atlas SRV hosts resolved at build time"
+            return srvUri
+        }
+
+        def hostList = hosts.unique().join(",")
+        def query = pathAndQuery.contains("?") ? pathAndQuery : "${pathAndQuery}?"
+        if (!query.contains("tls=") && !query.contains("ssl=")) {
+            query += query.endsWith("?") ? "tls=true" : "&tls=true"
+        }
+        if (!query.contains("authSource=")) {
+            query += "&authSource=admin"
+        }
+
+        def converted = "mongodb://${credentials}${hostList}${query}"
+        println "Atlas Android URI ready (${hosts.size()} shard hosts)"
+        return converted
+    } catch (Exception error) {
+        println "WARNING: SRV convert failed: ${error.message}"
+        return srvUri
+    }
+}
+
+def findServerEnvFile() {
+    def candidates = [
+        rootProject.file("../../Server/.env"),
+        rootProject.file("../../server/.env"),
+        rootProject.file("../Server/.env"),
+        rootProject.file("../server/.env"),
+    ]
+    def found = candidates.find { it.exists() }
+    if (found != null) {
+        return found
+    }
+    return rootProject.file("../../Server/.env")
+}
+
+def getAtlasEnv(key, defaultValue = "") {
+    def envFile = findServerEnvFile()
+    if (!envFile.exists()) {
+        return escapeForBuildConfig(defaultValue)
+    }
+    def value = getEnvValue(envFile, key)
+    return escapeForBuildConfig(value ?: defaultValue)
+}
+
+def getSyncApiUrl() {
+    def envFile = findServerEnvFile()
+    if (!envFile.exists()) {
+        println "WARNING: Server/.env missing — phone HTTP sync OFF until SYNC_API_URL set + rebuild"
+        return ""
+    }
+    def url = getEnvValue(envFile, "SYNC_API_URL")
+    if (!url) {
+        println "INFO: SYNC_API_URL empty — phone direct Atlas sync will be used if MONGODB_URI is set"
+        return ""
+    }
+    if (url.contains("localhost") || url.contains("127.0.0.1") || url.contains("10.") || url.contains("192.168")) {
+        println "WARNING: SYNC_API_URL is local/LAN — phone kill-state sync needs public HTTPS (e.g. Render)"
+    }
+    println "Sync API URL ready for phone build"
+    return escapeForBuildConfig(url)
+}
+
+def getMongoUri() {
+    def envFile = findServerEnvFile()
+    if (!envFile.exists()) {
+        println "WARNING: Server/.env missing — phone MongoDB sync OFF until .env set + rebuild"
+        return ""
+    }
+    def androidUri = getEnvValue(envFile, "MONGODB_URI_ANDROID")
+    if (androidUri) {
+        println "Using MONGODB_URI_ANDROID for phone build"
+        return escapeForBuildConfig(androidUri)
+    }
+    def uri = getEnvValue(envFile, "MONGODB_URI")
+    if (!uri) {
+        println "WARNING: MONGODB_URI missing in Server/.env"
+        return ""
+    }
+    if (uri.startsWith("mongodb+srv://")) {
+        def converted = convertSrvUriForAndroid(uri)
+        if (converted.startsWith("mongodb://")) {
+            return escapeForBuildConfig(converted)
+        }
+    }
+    return escapeForBuildConfig(uri)
+}
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.calltech"
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    defaultConfig {
+        applicationId "com.calltech"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 6
+        versionName "1.5"
+        buildConfigField "String", "SYNC_API_URL", "\"${getSyncApiUrl()}\""
+        buildConfigField "String", "ATLAS_DATA_APP_ID", "\"${getAtlasEnv('ATLAS_DATA_APP_ID')}\""
+        buildConfigField "String", "ATLAS_DATA_API_KEY", "\"${getAtlasEnv('ATLAS_DATA_API_KEY')}\""
+        buildConfigField "String", "ATLAS_DATA_SOURCE", "\"${getAtlasEnv('ATLAS_DATA_SOURCE', 'Cluster0')}\""
+        buildConfigField "String", "ATLAS_DATA_REGION", "\"${getAtlasEnv('ATLAS_DATA_REGION')}\""
+        buildConfigField "String", "MONGODB_URI", "\"${getMongoUri()}\""
+        buildConfigField "String", "MONGODB_DB", "\"${getEnvValue(findServerEnvFile(), "MONGODB_DB_NAME") ?: "calltech"}\""
+        buildConfigField "String", "DEFAULT_SIM_NUMBER", "\"${getEnvValue(findServerEnvFile(), "DEFAULT_SIM_NUMBER") ?: ""}\""
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    packaging {
+        resources {
+            pickFirsts += [
+                'META-INF/native-image/org.mongodb/bson/native-image.properties',
+                'META-INF/native-image/org.mongodb/mongodb-driver-core/native-image.properties',
+            ]
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/LICENSE',
+                'META-INF/LICENSE.txt',
+                'META-INF/NOTICE',
+                'META-INF/NOTICE.txt',
+            ]
+        }
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+
+    implementation "androidx.core:core-ktx:1.15.0"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "androidx.work:work-runtime-ktx:2.9.1"
+    implementation "org.mongodb:mongodb-driver-sync:4.11.1"
+    implementation "dnsjava:dnsjava:3.6.2"
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+}
+
+// USB install: MIUI prep + custom adb install (Gradle default installDebug MIUI par fail hota hai)
+afterEvaluate {
+    def projectRoot = rootProject.projectDir.parentFile
+    def grantScript = new File(projectRoot, "scripts/grant-android-permissions.js")
+    def prepareScript = new File(projectRoot, "scripts/prepare-miui-usb-install.js")
+    def installScript = new File(projectRoot, "scripts/install-android-apk.js")
+
+    tasks.register("prepareMiuiUsbInstall", Exec) {
+        group = "calltech"
+        description = "Prepare Redmi/MIUI for USB install"
+        workingDir projectRoot
+        commandLine "node", prepareScript.absolutePath
+        ignoreExitValue true
+        onlyIf { prepareScript.exists() }
+        doFirst {
+            println "CallTech: MIUI USB install prep..."
+        }
+    }
+
+    tasks.register("grantCallTechPermissions", Exec) {
+        group = "calltech"
+        description = "Grant SMS/call permissions on connected USB devices"
+        workingDir projectRoot
+        commandLine "node", grantScript.absolutePath
+        ignoreExitValue true
+        onlyIf { grantScript.exists() }
+        doFirst {
+            println "CallTech: permissions auto-grant..."
+        }
+    }
+
+    tasks.register("calltechInstallDebug", Exec) {
+        group = "calltech"
+        description = "Custom USB install (MIUI-safe)"
+        workingDir projectRoot
+        commandLine "node", installScript.absolutePath, "install"
+        onlyIf { installScript.exists() }
+        dependsOn("assembleDebug")
+        doFirst {
+            println "CallTech: custom USB install (MIUI-safe)..."
+        }
+    }
+
+    tasks.matching { it.name == "installDebug" }.configureEach { task ->
+        task.dependsOn("prepareMiuiUsbInstall")
+
+        if (installScript.exists()) {
+            // Gradle ka stock adb install MIUI par USER_RESTRICTED deta hai
+            task.actions.clear()
+            task.dependsOn("calltechInstallDebug")
+        }
+
+        task.finalizedBy("grantCallTechPermissions")
+    }
+}

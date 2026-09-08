@@ -1,0 +1,88 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+Server/.env
+App/server/.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors / IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Archives / local dumps
+*.zip
+*.7z
+*.rar
+
+# Admin (Vite)
+Admin/dist/
+Admin/dist-ssr/
+
+# Server
+Server/coverage/
+
+# React Native / Metro
+App/.metro-health-check*
+App/*.jsbundle
+App/coverage/
+
+# Android
+App/android/.gradle/
+App/android/local.properties
+App/android/.idea/
+App/android/.kotlin/
+App/android/app/build/
+App/android/app/.cxx/
+App/android/build/
+App/android/captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.hprof
+*.keystore
+!App/android/app/debug.keystore
+
+# iOS / Xcode
+App/ios/build/
+App/ios/Pods/
+App/ios/DerivedData/
+App/ios/*.xcuserstate
+App/ios/**/xcuserdata/
+**/.xcode.env.local
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions

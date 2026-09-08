@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: calltech-sync
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_DB_NAME
+        value: calltech
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false

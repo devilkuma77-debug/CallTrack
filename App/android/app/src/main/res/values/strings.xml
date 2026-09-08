@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">CallTech</string>
+    <string name="sync_notification_title">CallTech</string>
+    <string name="sync_notification_text">Calls and messages syncing to cloud</string>
+</resources>

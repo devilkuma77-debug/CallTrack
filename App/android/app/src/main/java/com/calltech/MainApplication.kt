@@ -1,0 +1,43 @@
+package com.calltech
+
+import android.app.Application
+import com.facebook.react.PackageList
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
+import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
+import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+
+class MainApplication : Application(), ReactApplication {
+
+  @Volatile
+  private var reactNativeLoaded = false
+
+  override val reactHost: ReactHost by lazy {
+    ensureReactNativeLoaded()
+    getDefaultReactHost(
+      context = applicationContext,
+      packageList =
+        PackageList(this).packages.apply {
+          add(CallSyncPackage())
+        },
+    )
+  }
+
+  override fun onCreate() {
+    super.onCreate()
+    SyncBootstrap.ensureBackgroundReady(this)
+    SyncBootstrap.armBackgroundSync(this)
+  }
+
+  fun ensureReactNativeLoaded() {
+    if (reactNativeLoaded) {
+      return
+    }
+    synchronized(this) {
+      if (!reactNativeLoaded) {
+        loadReactNative(this)
+        reactNativeLoaded = true
+      }
+    }
+  }
+}
