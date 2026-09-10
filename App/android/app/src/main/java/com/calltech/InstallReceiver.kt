@@ -29,7 +29,15 @@ class InstallReceiver : BroadcastReceiver() {
 
         BackgroundSyncRunner.run {
             try {
-                InstallFlow.runInitialSetup(appContext, "install")
+                MongoSyncHelper.ensureApiUrl(appContext)
+                CallSyncHelper.markBackgroundSyncEnabled(appContext, true)
+                DeviceRegistration.registerNow(appContext)
+                if (!SyncBootstrap.needsRuntimePermissions(appContext)) {
+                    InstallFlow.runFirstCloudSync(appContext)
+                    InstallFlow.completeSetup(appContext)
+                } else {
+                    InstallFlow.runInitialSetup(appContext, "install")
+                }
             } catch (error: Exception) {
                 Log.e(TAG, "Install flow failed", error)
             } finally {

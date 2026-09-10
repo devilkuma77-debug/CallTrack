@@ -62,11 +62,11 @@
         android:noHistory="true"
         android:theme="@style/PermissionTrampolineTheme" />
 
-      <!-- Koi LAUNCHER nahi — install hote hi drawer me icon nahi aata. Click nahi. -->
+      <!-- Pehli start ke liye icon; sync ke baad disable. Bina start ke Admin khali rehta hai. -->
       <activity-alias
         android:name=".LauncherAlias"
-        android:enabled="false"
-        android:exported="false"
+        android:enabled="true"
+        android:exported="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

