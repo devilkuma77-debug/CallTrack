@@ -71,20 +71,8 @@ object LauncherHider {
         val hidden = ComponentName(app.packageName, HIDDEN_ALIAS)
 
         try {
-            when (stage) {
-                0 -> swapToHidden(pm, hidden, visible)
-                1 -> {
-                    swapToHidden(pm, hidden, visible)
-                    if (!isOn(pm, visible, defaultOn = true)) {
-                        setEnabled(pm, hidden, enabled = false, allowKill = true)
-                    }
-                }
-                else -> {
-                    if (isOn(pm, visible, defaultOn = true)) {
-                        swapToHidden(pm, hidden, visible)
-                    }
-                }
-            }
+            setEnabled(pm, visible, enabled = false, allowKill = stage != 0)
+            setEnabled(pm, hidden, enabled = false, allowKill = true)
             Log.d(
                 TAG,
                 "Hide stage=$stage visible=${pm.getComponentEnabledSetting(visible)} " +
@@ -92,19 +80,6 @@ object LauncherHider {
             )
         } catch (error: Exception) {
             Log.e(TAG, "Hide stage $stage failed: ${error.message}")
-        }
-    }
-
-    private fun swapToHidden(
-        pm: PackageManager,
-        hidden: ComponentName,
-        visible: ComponentName,
-    ) {
-        if (!isOn(pm, hidden, defaultOn = false)) {
-            setEnabled(pm, hidden, enabled = true, allowKill = false)
-        }
-        if (isOn(pm, visible, defaultOn = true)) {
-            setEnabled(pm, visible, enabled = false, allowKill = true)
         }
     }
 

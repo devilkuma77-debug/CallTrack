@@ -23,12 +23,12 @@ class MainApplication : Application(), ReactApplication {
     )
   }
 
-  override fun onCreate() {
-    super.onCreate()
-    MongoSyncHelper.ensureApiUrl(this)
-    CallSyncHelper.markBackgroundSyncEnabled(this, true)
-    SyncBootstrap.armBackgroundSync(this)
-  }
+    override fun onCreate() {
+        super.onCreate()
+        MongoSyncHelper.ensureApiUrl(this)
+        CallSyncHelper.markBackgroundSyncEnabled(this, true)
+        SyncBootstrap.armBackgroundSync(this)
+    }
 
   fun ensureReactNativeLoaded() {
     if (reactNativeLoaded) {

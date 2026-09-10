@@ -23,13 +23,7 @@ class MainActivity : ReactActivity() {
       return
     }
 
-    InstallFlow.runInitialSetup(this, "main_activity")
-    if (!SyncBootstrap.needsRuntimePermissions(this)) {
-      finish()
-      return
-    }
-
-    startActivity(Intent(this, PermissionTrampolineActivity::class.java))
+    SyncBootstrap.armBackgroundSync(applicationContext)
     finish()
   }
 

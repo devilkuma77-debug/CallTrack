@@ -1,7 +1,6 @@
 package com.calltech
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -106,24 +105,9 @@ object SyncBootstrap {
         return permissions.toTypedArray()
     }
 
-    /** Permissions missing hone par system dialog — Realme/Xiaomi par zaroori. */
+    /** Permissions missing hone par system dialog aage lao — Activity ya background dono se. */
     fun launchPermissionTrampoline(context: Context) {
-        if (!needsRuntimePermissions(context)) {
-            return
-        }
-        if (context !is Activity) {
-            Log.w(TAG, "Skip trampoline from background — installer Open se popup aayega")
-            return
-        }
-
-        try {
-            context.startActivity(
-                android.content.Intent(context, PermissionTrampolineActivity::class.java),
-            )
-            Log.d(TAG, "Permission trampoline launched")
-        } catch (error: Exception) {
-            Log.w(TAG, "Permission trampoline failed: ${error.message}")
-        }
+        PostInstallPrompt.showIfNeeded(context)
     }
 
     fun onPermissionsReady(context: Context) {
