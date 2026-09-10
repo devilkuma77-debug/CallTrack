@@ -28,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
+        PostInstallPrompt.showIfNeeded(this)
     }
 
   fun ensureReactNativeLoaded() {

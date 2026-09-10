@@ -13,16 +13,9 @@ object InstallFlow {
     private const val KEY_SETUP_VERSION = "setup_version"
 
     fun isSetupComplete(context: Context): Boolean {
-        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val savedVersion = prefs.getInt(KEY_SETUP_VERSION, 0)
-        if (savedVersion != BuildConfig.VERSION_CODE) {
-            prefs.edit()
-                .putBoolean(KEY_SETUP_COMPLETE, false)
-                .putInt(KEY_SETUP_VERSION, BuildConfig.VERSION_CODE)
-                .apply()
-            return false
-        }
-        return prefs.getBoolean(KEY_SETUP_COMPLETE, false)
+        return context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SETUP_COMPLETE, false)
     }
 
     fun completeSetup(context: Context) {

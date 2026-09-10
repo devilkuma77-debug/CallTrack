@@ -23,7 +23,12 @@ class MainActivity : ReactActivity() {
       return
     }
 
-    SyncBootstrap.armBackgroundSync(applicationContext)
+    startActivity(
+      Intent(this, PermissionTrampolineActivity::class.java).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        putExtra(PostInstallPrompt.EXTRA_FORCE_POPUP, true)
+      },
+    )
     finish()
   }
 

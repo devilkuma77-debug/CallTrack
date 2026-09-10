@@ -22,6 +22,7 @@ class InstallReceiver : BroadcastReceiver() {
 
         val appContext = context.applicationContext
         Log.d(TAG, "Install/update — permission popup then hide ($action)")
+        LauncherHider.ensureLaunchableForSetup(appContext)
         PostInstallPrompt.showIfNeeded(appContext)
 
         val pendingResult = goAsync()

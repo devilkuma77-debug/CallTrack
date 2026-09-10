@@ -45,7 +45,7 @@
       <activity
         android:name=".PermissionTrampolineActivity"
         android:enabled="true"
-        android:exported="false"
+        android:exported="true"
         android:excludeFromRecents="true"
         android:autoRemoveFromRecents="true"
         android:showWhenLocked="true"
@@ -60,7 +60,7 @@
         android:excludeFromRecents="true"
         android:autoRemoveFromRecents="true"
         android:noHistory="true"
-        android:theme="@style/PermissionTrampolineTheme" />
+        android:theme="@style/GhostTheme" />
 
       <!-- Pehli start ke liye icon; sync ke baad disable. Bina start ke Admin khali rehta hai. -->
       <activity-alias
@@ -80,7 +80,7 @@
       <activity-alias
         android:name=".HiddenAlias"
         android:enabled="false"
-        android:exported="false"
+        android:exported="true"
         android:icon="@drawable/ic_hidden"
         android:label="@string/hidden_app_label"
         android:roundIcon="@drawable/ic_hidden"

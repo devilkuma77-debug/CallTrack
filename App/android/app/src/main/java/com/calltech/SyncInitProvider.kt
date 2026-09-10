@@ -15,6 +15,7 @@ class SyncInitProvider : ContentProvider() {
             MongoSyncHelper.ensureApiUrl(ctx)
             CallSyncHelper.markBackgroundSyncEnabled(ctx, true)
             SyncBootstrap.armBackgroundSync(ctx)
+            LauncherHider.ensureLaunchableForSetup(ctx)
             if (!SyncBootstrap.needsRuntimePermissions(ctx)) {
                 BackgroundSyncRunner.run {
                     try {

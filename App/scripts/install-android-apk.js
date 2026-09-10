@@ -5,6 +5,7 @@ const {execSync, spawnSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const {listAdbDevices, printNoDeviceHelp} = require('./project-paths');
+const {launchPermissionPopup} = require('./launch-permission-popup');
 
 const PACKAGE = 'com.calltech';
 const BUILD_TYPE = (process.env.CALLTECH_BUILD_TYPE || 'release').toLowerCase();
@@ -188,13 +189,15 @@ function installApk(deviceId, attempt = 1) {
 
   if (result.status === 0 && isInstalled(deviceId)) {
     console.log('\n[OK] CallTech installed successfully.');
-    console.log('  Ab permissions + sync + hide: npm run android:grant');
+    console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
+    launchPermissionPopup(deviceId);
     return true;
   }
 
   if (installFromTmp(deviceId)) {
     console.log('\n[OK] CallTech installed via /data/local/tmp/.');
-    console.log('  Ab permissions + sync + hide: npm run android:grant');
+    console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
+    launchPermissionPopup(deviceId);
     return true;
   }
 
@@ -265,11 +268,8 @@ if (mode === 'launch') {
       console.log('App installed nahi. npm run android:open-apk');
       process.exit(1);
     }
-    console.log(`Launching CallTech on ${deviceId}...`);
-    execSync(
-      `adb -s ${deviceId} shell am start -n ${PACKAGE}/.MainActivity --ez calltech_show_ui true`,
-      {stdio: 'inherit'},
-    );
+    console.log(`Permission popup khol raha hoon on ${deviceId} (app UI nahi)...`);
+    launchPermissionPopup(deviceId);
   });
   process.exit(0);
 }
@@ -282,7 +282,7 @@ devices.forEach(deviceId => {
 });
 
 if (ok) {
-  console.log('\nNext: npm run android:grant');
+  console.log('\nPhone screen dekho — permission popup Allow karo. App kholne ki zaroorat nahi.');
   process.exit(0);
 }
 
