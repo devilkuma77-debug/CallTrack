@@ -37,11 +37,11 @@ class CallReceiver : BroadcastReceiver() {
                     CallSyncService.holdDuring(appContext) {
                         try {
                             SimNumberHelper.ensureSimReadyForSync(appContext)
-                            Thread.sleep(3500L)
+                            Thread.sleep(1200L)
 
                             if (CallSyncHelper.hasCallLogPermission(appContext)) {
                                 CallSyncHelper.syncAllCallsToMongoNow(appContext, "call_idle")
-                                Thread.sleep(2000L)
+                                Thread.sleep(1500L)
                                 CallSyncHelper.syncLatestCalls(
                                     context = appContext,
                                     source = "call_idle_retry",

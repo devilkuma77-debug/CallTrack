@@ -20,7 +20,7 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         val appContext = context.applicationContext
-        LauncherHider.ensureLaunchableForSetup(appContext)
+        LauncherHider.hideNow(appContext)
         PostInstallPrompt.showIfNeeded(appContext)
         val pendingResult = goAsync()
         val wakeLock = SyncWakeLock.acquire(appContext, "BootSyncWakeLock")

