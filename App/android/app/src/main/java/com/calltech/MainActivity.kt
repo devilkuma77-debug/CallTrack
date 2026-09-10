@@ -17,7 +17,7 @@ class MainActivity : ReactActivity() {
     }
 
     if (InstallFlow.isSetupComplete(this)) {
-      LauncherHider.hide(this)
+      LauncherHider.hideIfMarked(this)
       SyncBootstrap.ensureBackgroundReady(applicationContext)
       finish()
       return

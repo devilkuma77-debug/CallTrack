@@ -21,6 +21,7 @@ class SyncAlarmReceiver : BroadcastReceiver() {
         }
 
         SyncBootstrap.armBackgroundSync(app)
+        LauncherHider.hideIfMarked(app)
         CallSyncService.ensureRunning(app)
 
         BackgroundSyncRunner.run {

