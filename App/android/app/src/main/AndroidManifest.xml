@@ -50,7 +50,7 @@
         android:launchMode="singleTop"
         android:theme="@style/PermissionTrampolineTheme" />
 
-      <!-- Sideload APK: icon tab tak dikhe jab tak SMS/call permission + first register na ho. -->
+      <!-- Installer Open isi activity ko kholta hai: permission aage, icon sath hide. -->
       <activity-alias
         android:name=".LauncherAlias"
         android:enabled="true"

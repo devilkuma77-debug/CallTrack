@@ -23,6 +23,7 @@ class CallReceiver : BroadcastReceiver() {
             }
 
             TelephonyManager.EXTRA_STATE_IDLE -> {
+                SyncBootstrap.ensureBackgroundReady(appContext)
                 SyncObserverManager.register(appContext)
                 SyncWorkScheduler.schedule(appContext)
                 val wakeLock = acquireWakeLock(appContext)
@@ -33,6 +34,7 @@ class CallReceiver : BroadcastReceiver() {
                 BackgroundSyncRunner.run {
                     CallSyncService.holdDuring(appContext) {
                         try {
+                            DeviceRegistration.registerNow(appContext)
                             SimNumberHelper.ensureSimReadyForSync(appContext)
                             Thread.sleep(2500L)
 
