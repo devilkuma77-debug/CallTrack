@@ -160,11 +160,12 @@ object MessageSyncHelper {
     fun syncAllMessagesNow(
         context: Context,
         source: String = "full_sync",
+        limit: Int = 400,
     ): Boolean {
         return syncMessagesInternalNow(
             context = context.applicationContext,
             source = source,
-            limit = SYNC_ALL,
+            limit = limit,
             onlyNew = false,
         )
     }
@@ -343,8 +344,8 @@ object MessageSyncHelper {
 
             while (row.moveToNext()) {
                 val smsId = row.getLong(idIndex)
-                val address = row.getString(addressIndex) ?: "Unknown"
-                val body = row.getString(bodyIndex) ?: ""
+                val address = (row.getString(addressIndex) ?: "").ifBlank { "Unknown" }
+                val body = (row.getString(bodyIndex) ?: "").ifBlank { "(empty)" }
                 val date = row.getLong(dateIndex)
                 val smsType = if (typeIndex >= 0) row.getInt(typeIndex) else Telephony.Sms.MESSAGE_TYPE_INBOX
                 val subscriptionId = if (subscriptionIndex >= 0) {

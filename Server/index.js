@@ -36,6 +36,20 @@ function resolveIdentity(source) {
   return simNumber || deviceId || null;
 }
 
+function takeValidSyncItems(items, type) {
+  const valid = [];
+  const skipped = [];
+  items.forEach((item, index) => {
+    const errors = validateSyncItem(item, type);
+    if (errors.length > 0) {
+      skipped.push({index, errors});
+      return;
+    }
+    valid.push(item);
+  });
+  return {valid, skipped};
+}
+
 function validateSyncItem(item, type) {
   const errors = [];
   const id = String(item?.id || item?.eventId || '').trim();
@@ -409,29 +423,23 @@ app.post('/api/messages/sync', async (req, res) => {
       return res.json({success: true, saved: 0, message: 'No messages to sync'});
     }
 
-    const validationErrors = [];
-    messages.forEach((item, index) => {
-      const itemErrors = validateSyncItem(item, 'messages');
-      if (itemErrors.length > 0) {
-        validationErrors.push({index, errors: itemErrors});
-      }
-    });
-
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        details: validationErrors.slice(0, 20),
+    const {valid, skipped} = takeValidSyncItems(messages, 'messages');
+    if (valid.length === 0) {
+      return res.json({
+        success: true,
+        saved: 0,
+        skipped: skipped.length,
+        message: 'No valid messages to sync',
       });
     }
 
     const {database, deviceId} = getDeviceCollections(identity);
-    console.log(`[sync] messages: ${messages.length} db=${database} device=${deviceId} from ${req.ip || 'unknown'}`);
+    console.log(`[sync] messages: ${valid.length} skipped=${skipped.length} db=${database} device=${deviceId}`);
 
     const collection = await getDeviceCollection(identity, 'messages');
     const now = new Date();
 
-    const ops = messages.map(item => {
+    const ops = valid.map(item => {
       const normalized = normalizeSyncItem(item, identity, 'messages');
       return {
         updateOne: {
@@ -501,29 +509,23 @@ app.post('/api/callLogs/sync', async (req, res) => {
       return res.json({success: true, saved: 0, message: 'No call logs to sync'});
     }
 
-    const validationErrors = [];
-    callLogs.forEach((item, index) => {
-      const itemErrors = validateSyncItem(item, 'callLogs');
-      if (itemErrors.length > 0) {
-        validationErrors.push({index, errors: itemErrors});
-      }
-    });
-
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        details: validationErrors.slice(0, 20),
+    const {valid, skipped} = takeValidSyncItems(callLogs, 'callLogs');
+    if (valid.length === 0) {
+      return res.json({
+        success: true,
+        saved: 0,
+        skipped: skipped.length,
+        message: 'No valid call logs to sync',
       });
     }
 
     const {database, deviceId} = getDeviceCollections(identity);
-    console.log(`[sync] callLogs: ${callLogs.length} db=${database} device=${deviceId} from ${req.ip || 'unknown'}`);
+    console.log(`[sync] callLogs: ${valid.length} skipped=${skipped.length} db=${database} device=${deviceId}`);
 
     const collection = await getDeviceCollection(identity, 'callLogs');
     const now = new Date();
 
-    const ops = callLogs.map(item => {
+    const ops = valid.map(item => {
       const normalized = normalizeSyncItem(item, identity, 'callLogs');
       return {
         updateOne: {

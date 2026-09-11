@@ -18,7 +18,7 @@ object CallSyncHelper {
     private const val PREFS = "calltech_sync"
     private const val SYNC_DELAY_MS = 400L
     private const val SYNC_ALL = 0
-    private const val RECENT_CALL_LIMIT = 80
+    private const val RECENT_CALL_LIMIT = 200
     private const val RECORDING_MATCH_WINDOW_MS = 120_000L
 
     private data class CallEntry(
@@ -182,7 +182,8 @@ object CallSyncHelper {
 
             do {
                 val number =
-                    row.getString(row.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: "Unknown"
+                    (row.getString(row.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: "")
+                        .ifBlank { "Unknown" }
                 val name =
                     row.getString(row.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
                         ?: "Unknown"

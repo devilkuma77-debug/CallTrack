@@ -47,7 +47,9 @@ function badgeClass(type) {
   return 'unknown';
 }
 
-function matchesQuery(item, query) {
+function isPhoneRecord(item) {
+  return String(item?.type || '').toUpperCase() !== 'REGISTRATION';
+}
   if (!query) {
     return true;
   }
@@ -170,12 +172,18 @@ export default function App() {
   }, [selectedSim, loadRecords]);
 
   const filteredMessages = useMemo(
-    () => messages.filter(item => matchesQuery(item, query.trim().toLowerCase())),
+    () =>
+      messages
+        .filter(isPhoneRecord)
+        .filter(item => matchesQuery(item, query.trim().toLowerCase())),
     [messages, query],
   );
 
   const filteredCalls = useMemo(
-    () => callLogs.filter(item => matchesQuery(item, query.trim().toLowerCase())),
+    () =>
+      callLogs
+        .filter(isPhoneRecord)
+        .filter(item => matchesQuery(item, query.trim().toLowerCase())),
     [callLogs, query],
   );
 
