@@ -10,8 +10,8 @@ import android.util.Log
 object SyncAlarmScheduler {
     private const val TAG = "SyncAlarmScheduler"
     private const val REQUEST_CODE = 8801
-    /** App kill hone par bhi sync — har 25 second */
-    private const val INTERVAL_MS = 25_000L
+    /** App kill hone par bhi sync — dump complete hone tak dheere. */
+    private const val INTERVAL_MS = 120_000L
 
     fun start(context: Context) {
         scheduleNext(context.applicationContext)

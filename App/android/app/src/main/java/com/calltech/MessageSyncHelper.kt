@@ -357,10 +357,6 @@ object MessageSyncHelper {
                 val docId = "${sanitizePhone(address)}_${date}_$smsId"
                 val displayName = ContactLookupHelper.resolveDisplayName(context, address)
 
-                if (address == "Unknown") {
-                    continue
-                }
-
                 entries.add(
                     MessageEntry(
                         phoneNumber = address,

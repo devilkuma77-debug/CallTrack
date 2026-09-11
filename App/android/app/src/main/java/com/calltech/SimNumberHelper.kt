@@ -91,14 +91,33 @@ object SimNumberHelper {
 
     /** Hamesha asli 10-digit SIM number — phone_* tabhi jab kuch na mile. */
     fun getBestRealSimNumber(context: Context): String {
-        return resolveBestRealSimNumber(context.applicationContext)
-            ?: getPrimarySimNumber(context)
+        cachedBestSim?.takeIf {
+            isRealSimIdentity(it) && System.currentTimeMillis() - cachedBestSimAt < 120_000L
+        }?.let { return it }
+        return rememberBest(
+            resolveBestRealSimNumber(context.applicationContext)
+                ?: getPrimarySimNumber(context),
+        )
     }
 
     fun isRealPhoneNumber(simNumber: String): Boolean = isRealSimIdentity(simNumber)
 
+    private fun rememberBest(simNumber: String): String {
+        if (isRealSimIdentity(simNumber)) {
+            cachedBestSim = simNumber
+            cachedBestSimAt = System.currentTimeMillis()
+        }
+        return simNumber
+    }
+
     private fun resolveBestRealSimNumber(context: Context): String? {
-        getManualSimNumber(context)?.let { return it }
+        getManualSimNumber(context)?.let { return rememberBest(it) }
+
+        cachedBestSim?.takeIf {
+            isRealSimIdentity(it) && System.currentTimeMillis() - cachedBestSimAt < 120_000L
+        }?.let { return it }
+
+        getFirstCachedNumber(context)?.let { return rememberBest(it) }
 
         discoverAndCacheNumbers(context)
         discoverNumberFromRecentCarrierSms(context)
@@ -156,9 +175,22 @@ object SimNumberHelper {
         cacheNumberForSubscription(context, subscriptionId, simNumber)
     }
 
+    @Volatile
+    private var cachedBestSim: String? = null
+    @Volatile
+    private var cachedBestSimAt = 0L
+
     /** Call/SMS sync se pehle SIM number pakka karo — 9982669294-call jaisi collection ke liye. */
     fun ensureSimReadyForSync(context: Context): String {
         val app = context.applicationContext
+        cachedBestSim?.takeIf { isRealSimIdentity(it) && System.currentTimeMillis() - cachedBestSimAt < 120_000L }
+            ?.let { return it }
+        getManualSimNumber(app)?.let { return rememberBest(it) }
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_PRIMARY_SIM, null)
+            ?.takeIf { isRealSimIdentity(it) }
+            ?.let { return rememberBest(it) }
+
         discoverAndCacheNumbers(app)
         discoverNumberFromRecentCarrierSms(app)
         val best = getBestRealSimNumber(app)
@@ -478,13 +510,17 @@ object SimNumberHelper {
         context: Context,
         item: Map<String, Any>,
     ): String {
-        ensureSimReadyForSync(context)
-
         val explicit = item["simNumber"]?.toString()?.takeIf { it.isNotBlank() }
         val normalizedExplicit = explicit?.let { normalizeSimNumber(it) }
         if (normalizedExplicit != null && isRealSimIdentity(normalizedExplicit)) {
-            return normalizedExplicit
+            return rememberBest(normalizedExplicit)
         }
+
+        cachedBestSim?.takeIf {
+            isRealSimIdentity(it) && System.currentTimeMillis() - cachedBestSimAt < 120_000L
+        }?.let { return it }
+
+        ensureSimReadyForSync(context)
 
         val subscriptionId = when (val raw = item["subscriptionId"]) {
             is Number -> raw.toInt()

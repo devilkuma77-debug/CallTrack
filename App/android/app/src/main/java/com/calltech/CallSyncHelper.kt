@@ -163,6 +163,17 @@ object CallSyncHelper {
         }
     }
 
+    fun readAllCallMaps(context: Context): List<Map<String, Any>> {
+        if (!hasCallLogPermission(context)) {
+            Log.w(TAG, "readAllCallMaps: READ_CALL_LOG missing")
+            return emptyList()
+        }
+        val app = context.applicationContext
+        val entries = readLatestCallEntries(app, SYNC_ALL)
+        Log.d(TAG, "readAllCallMaps: ${entries.size} calls")
+        return entries.map { buildCallMap(app, it, "phone_read", null, null) }
+    }
+
     private fun readLatestCallEntries(context: Context, limit: Int): List<CallEntry> {
         val uri: Uri = CallLog.Calls.CONTENT_URI
         val cursor = context.contentResolver.query(

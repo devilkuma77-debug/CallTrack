@@ -72,61 +72,95 @@ export function getDevices() {
 
 export function deleteSim(identity) {
   const query = new URLSearchParams({
-    simNumber: identity,
+    simNumber: apiIdentity(identity) || identity,
   });
   return request(`/api/sims?${query}`, {method: 'DELETE'});
 }
 
-export function getMessages(identity, limit = 200) {
+/** API query — +91 mat bhejo; 10-digit / prefix se collection milti hai. */
+export function apiIdentity(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  if (raw.startsWith('phone_') || raw.startsWith('sim')) {
+    return raw;
+  }
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 12 && digits.startsWith('91')) {
+    return digits.slice(-10);
+  }
+  if (digits.length >= 10) {
+    return digits.slice(-10);
+  }
+  return raw;
+}
+
+export function getMessages(identity, limit = 500) {
+  const sim = apiIdentity(identity);
   const query = new URLSearchParams({
-    simNumber: identity,
+    simNumber: sim,
     limit: String(limit),
   });
   return request(`/api/messages?${query}`);
 }
 
-export function getCallLogs(identity, limit = 200) {
+export function getCallLogs(identity, limit = 500) {
+  const sim = apiIdentity(identity);
   const query = new URLSearchParams({
-    simNumber: identity,
+    simNumber: sim,
     limit: String(limit),
   });
   return request(`/api/callLogs?${query}`);
 }
 
 export function simIdentity(sim) {
-  return sim?.simNumber || sim?.prefix || sim?.deviceId || '';
+  return (
+    apiIdentity(sim?.prefix) ||
+    apiIdentity(sim?.simNumber) ||
+    apiIdentity(sim?.deviceId) ||
+    sim?.simNumber ||
+    sim?.prefix ||
+    sim?.deviceId ||
+    ''
+  );
+}
+
+function firstNonEmpty(...lists) {
+  for (const list of lists) {
+    if (Array.isArray(list) && list.length > 0) {
+      return list;
+    }
+  }
+  return [];
 }
 
 export function mergeSimsWithDevices(sims = [], devices = []) {
   const rows = new Map();
 
-  const keyFor = value => {
-    const raw = String(value || '').trim();
-    if (!raw) {
-      return '';
-    }
-    if (raw.startsWith('phone_') || raw.startsWith('sim')) {
-      return raw;
-    }
-    const digits = raw.replace(/\D/g, '');
-    return digits.length >= 10 ? digits.slice(-10) : raw;
-  };
+  const keyFor = value => apiIdentity(value);
 
   for (const sim of sims) {
     const key = keyFor(sim.prefix || sim.simNumber || sim.deviceId);
     if (!key) {
       continue;
     }
-    rows.set(key, {...sim});
+    rows.set(key, {
+      ...sim,
+      prefix: key,
+      simNumber: sim.simNumber || `+91${key}`,
+      messageCount: Number(sim.messageCount || 0),
+      callCount: Number(sim.callCount || 0),
+    });
   }
 
   for (const device of devices) {
     const key = keyFor(device.simNumber) || keyFor(device.deviceId);
-    if (!key) {
+    if (!key || key.startsWith('phone_') || key.startsWith('sim')) {
       continue;
     }
     const current = rows.get(key) || {
-      simNumber: device.simNumber,
+      simNumber: device.simNumber || `+91${key}`,
       deviceId: device.deviceId,
       prefix: key,
       messageCount: 0,
@@ -134,14 +168,19 @@ export function mergeSimsWithDevices(sims = [], devices = []) {
     };
     rows.set(key, {
       ...current,
-      simNumber: current.simNumber || device.simNumber,
-      deviceId: device.deviceId || current.deviceId,
-      model: device.model,
-      manufacturer: device.manufacturer,
-      appVersion: device.appVersion,
-      lastSeen: device.updatedAt || device.registeredAt,
+      prefix: key,
+      simNumber: current.simNumber || device.simNumber || `+91${key}`,
+      deviceId: current.deviceId || device.deviceId,
+      messageCount: Number(current.messageCount || device.messageCount || 0),
+      callCount: Number(current.callCount || device.callCount || 0),
+      model: device.model || current.model,
+      manufacturer: device.manufacturer || current.manufacturer,
+      appVersion: device.appVersion || current.appVersion,
+      lastSeen: device.updatedAt || device.registeredAt || current.lastSeen,
     });
   }
 
   return [...rows.values()];
 }
+
+export {firstNonEmpty};

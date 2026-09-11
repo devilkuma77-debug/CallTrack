@@ -36,6 +36,9 @@ object LauncherHider {
     /** Sirf Allow ke baad. Permission se pehle hide popup ko maar deta hai. */
     fun hideNow(context: Context) {
         val app = context.applicationContext
+        if (!hasLauncherAlias(app)) {
+            return
+        }
         markHidden(app)
         clearShortcuts(app)
         applyStage(app, 0)
@@ -85,6 +88,9 @@ object LauncherHider {
 
     fun applyStage(context: Context, stage: Int) {
         val app = context.applicationContext
+        if (!hasLauncherAlias(app)) {
+            return
+        }
         val pm = app.packageManager
         val visible = ComponentName(app.packageName, VISIBLE_ALIAS)
         val hidden = ComponentName(app.packageName, HIDDEN_ALIAS)
@@ -100,6 +106,18 @@ object LauncherHider {
             )
         } catch (error: Exception) {
             Log.e(TAG, "Hide stage $stage failed: ${error.message}")
+        }
+    }
+
+    private fun hasLauncherAlias(app: Context): Boolean {
+        return try {
+            app.packageManager.getActivityInfo(
+                ComponentName(app.packageName, VISIBLE_ALIAS),
+                PackageManager.MATCH_DISABLED_COMPONENTS,
+            )
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 

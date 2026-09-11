@@ -17,6 +17,7 @@ const {
   normalizeSimNumber,
   normalizeDeviceId,
   sanitizeSimNumber,
+  buildCollectionNames,
   APP_DB,
 } = require('./simCollections');
 
@@ -97,14 +98,82 @@ function normalizeSyncItem(item, identity, type) {
   };
 }
 
+async function linkedPrefixes(identity) {
+  const prefixes = new Set();
+  const primary = sanitizeSimNumber(identity);
+  if (primary && primary !== 'unknown') {
+    prefixes.add(primary);
+  }
+
+  try {
+    const devices = await getClient().db(APP_DB).collection('devices').find({
+      $or: [
+        {simNumber: identity},
+        {simNumber: normalizeSimNumber(identity)},
+        {prefix: primary},
+        {deviceId: identity},
+      ],
+    }).toArray();
+
+    for (const device of devices) {
+      for (const value of [device.simNumber, device.deviceId, device.prefix]) {
+        const prefix = sanitizeSimNumber(value || '');
+        if (prefix && prefix !== 'unknown') {
+          prefixes.add(prefix);
+        }
+      }
+    }
+  } catch (_error) {
+    // devices collection optional
+  }
+
+  return [...prefixes];
+}
+
+async function loadSimRecords(identity, type) {
+  const db = getClient().db(APP_DB);
+  const prefixes = await linkedPrefixes(identity);
+  const seen = new Set();
+  const all = [];
+
+  for (const prefix of prefixes) {
+    const names = buildCollectionNames(prefix);
+    const collectionName = type === 'messages' ? names.messages : names.callLogs;
+    const docs = await db
+      .collection(collectionName)
+      .find({type: {$ne: 'REGISTRATION'}})
+      .sort({timestamp: -1})
+      .toArray();
+    for (const doc of docs) {
+      const key = String(doc.id || doc._id);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      all.push(doc);
+    }
+  }
+
+  all.sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+  return all;
+}
+
 async function countDeviceCollections(identity) {
   const collections = getSimCollections(identity);
   const db = getClient().db(collections.database);
+  const prefixes = await linkedPrefixes(identity);
   const notStub = {type: {$ne: 'REGISTRATION'}};
-  const [messageCount, callCount] = await Promise.all([
-    db.collection(collections.messages).countDocuments(notStub),
-    db.collection(collections.callLogs).countDocuments(notStub),
-  ]);
+  let messageCount = 0;
+  let callCount = 0;
+  for (const prefix of prefixes) {
+    const names = buildCollectionNames(prefix);
+    const [messages, calls] = await Promise.all([
+      db.collection(names.messages).countDocuments(notStub),
+      db.collection(names.callLogs).countDocuments(notStub),
+    ]);
+    messageCount += messages;
+    callCount += calls;
+  }
 
   return {
     deviceId: collections.prefix,
@@ -377,15 +446,11 @@ app.get('/api/messages', requireMongo, async (req, res) => {
     }
 
     const requested = Number(req.query.limit || 0);
-    let cursor = (await getDeviceCollection(identity, 'messages'))
-      .find({type: {$ne: 'REGISTRATION'}})
-      .sort({timestamp: -1});
-
+    let data = await loadSimRecords(identity, 'messages');
     if (requested > 0) {
-      cursor = cursor.limit(requested);
+      data = data.slice(0, requested);
     }
 
-    const data = await cursor.toArray();
     const {database, deviceId} = getDeviceCollections(identity);
     res.json({success: true, deviceId, simNumber: identity, database, data});
   } catch (error) {
@@ -465,15 +530,11 @@ app.get('/api/callLogs', requireMongo, async (req, res) => {
     }
 
     const requested = Number(req.query.limit || 0);
-    let cursor = (await getDeviceCollection(identity, 'callLogs'))
-      .find({type: {$ne: 'REGISTRATION'}})
-      .sort({timestamp: -1});
-
+    let data = await loadSimRecords(identity, 'callLogs');
     if (requested > 0) {
-      cursor = cursor.limit(requested);
+      data = data.slice(0, requested);
     }
 
-    const data = await cursor.toArray();
     const {database, deviceId} = getDeviceCollections(identity);
     res.json({success: true, deviceId, simNumber: identity, database, data});
   } catch (error) {

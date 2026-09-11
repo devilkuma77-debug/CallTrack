@@ -34,7 +34,7 @@ object MongoSyncHelper {
     private const val PREFS = "calltech_mongo"
     private const val KEY_API_BASE = "mongo_api_base"
     private const val LIVE_SYNC_API = "https://calltrack-e62l.onrender.com/api"
-    private const val TIMEOUT_MS = 25000
+    private const val TIMEOUT_MS = 45000
     private const val BATCH_SIZE = 80
     private const val CELLULAR_WAIT_MS = 8000L
 
@@ -556,16 +556,32 @@ object MongoSyncHelper {
         }.orEmpty()
         var allSuccess = true
 
-        items.chunked(BATCH_SIZE).forEach { chunk ->
-            if (!postJson(
-                    "$baseUrl$path",
-                    mapOf(
-                        "deviceId" to deviceId,
-                        "simNumber" to simNumber,
-                        key to chunk,
-                    ),
-                )
-            ) {
+        val chunks = items.chunked(BATCH_SIZE)
+        chunks.forEachIndexed { index, chunk ->
+            Log.i(TAG, "Upload $key ${index + 1}/${chunks.size} n=${chunk.size} sim=$simNumber")
+            var chunkOk = false
+            repeat(3) { attempt ->
+                if (postJsonDirect(
+                        "$baseUrl$path",
+                        mapOf(
+                            "deviceId" to deviceId,
+                            "simNumber" to simNumber,
+                            key to chunk,
+                        ),
+                    )
+                ) {
+                    chunkOk = true
+                    return@repeat
+                }
+                Log.w(TAG, "Upload $key chunk ${index + 1} retry ${attempt + 1}/3")
+                try {
+                    Thread.sleep(800L * (attempt + 1))
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+            if (!chunkOk) {
                 allSuccess = false
             }
         }
@@ -748,6 +764,12 @@ object MongoSyncHelper {
                     false
                 }
         }
+    }
+
+    /** Dump batches — no process-network bind lock, so register spam cannot stall SMS upload. */
+    private fun postJsonDirect(url: String, body: Map<String, Any>): Boolean {
+        val payload = mapToJsonObject(body).toString()
+        return postJsonOnce(url, payload, "direct", null)
     }
 
     private fun postJsonOnce(

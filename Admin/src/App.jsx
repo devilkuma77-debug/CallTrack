@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   deleteSim,
+  firstNonEmpty,
   getCallLogs,
   getDevices,
   getHealth,
@@ -104,12 +105,18 @@ export default function App() {
     ]);
 
     const simList = mergeSimsWithDevices(
-      simsRes.sims || simsRes.devices || statsRes.sims || [],
+      firstNonEmpty(simsRes.sims, simsRes.devices, statsRes.sims, statsRes.devices),
       devicesRes.devices || [],
     ).filter(isVisibleSim);
     setHealthOk(Boolean(health.ok));
-    const messageCount = simList.reduce((total, sim) => total + Number(sim.messageCount || 0), 0);
-    const callCount = simList.reduce((total, sim) => total + Number(sim.callCount || 0), 0);
+    const messageCount = Math.max(
+      Number(statsRes.messageCount || 0),
+      simList.reduce((total, sim) => total + Number(sim.messageCount || 0), 0),
+    );
+    const callCount = Math.max(
+      Number(statsRes.callCount || 0),
+      simList.reduce((total, sim) => total + Number(sim.callCount || 0), 0),
+    );
     setStats({
       ...statsRes,
       messageCount,
@@ -135,9 +142,13 @@ export default function App() {
     }
 
     const [messageRes, callRes] = await Promise.all([
-      getMessages(identity, 1000),
-      getCallLogs(identity, 1000),
+      getMessages(identity, 500),
+      getCallLogs(identity, 500),
     ]);
+
+    if (messageRes.error || callRes.error) {
+      setError(messageRes.error || callRes.error);
+    }
 
     setMessages(Array.isArray(messageRes.data) ? messageRes.data : []);
     setCallLogs(Array.isArray(callRes.data) ? callRes.data : []);
@@ -162,13 +173,20 @@ export default function App() {
   useEffect(() => {
     refresh();
     const timer = setInterval(() => {
-      loadOverview().catch(() => setHealthOk(false));
-      if (selectedSim) {
-        loadRecords(selectedSim).catch(() => {});
-      }
-    }, 2000);
+      loadOverview()
+        .then(identity => {
+          const id = identity || selectedSim;
+          if (id) {
+            return loadRecords(id);
+          }
+          return undefined;
+        })
+        .catch(() => setHealthOk(false));
+    }, 3000);
     return () => clearInterval(timer);
-  }, [refresh, loadOverview, loadRecords, selectedSim]);
+    // selectedSim intentionally omitted — interval identity loadOverview se aati hai
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, loadOverview, loadRecords]);
 
   useEffect(() => {
     if (!selectedSim) {

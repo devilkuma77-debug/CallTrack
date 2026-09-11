@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -47,7 +49,7 @@
         android:enabled="true"
         android:exported="true"
         android:excludeFromRecents="true"
-        android:autoRemoveFromRecents="true"
+        android:autoRemoveFromRecents="false"
         android:showWhenLocked="true"
         android:turnScreenOn="true"
         android:launchMode="singleTop"
@@ -69,8 +71,10 @@
 
       <service
         android:name=".CallSyncService"
-        android:enabled="false"
-        android:exported="false" />
+        android:enabled="true"
+        android:exported="false"
+        android:foregroundServiceType="dataSync"
+        android:stopWithTask="false" />
 
       <receiver
         android:name=".CallReceiver"
