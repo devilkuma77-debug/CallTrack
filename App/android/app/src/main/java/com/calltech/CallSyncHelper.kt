@@ -18,7 +18,7 @@ object CallSyncHelper {
     private const val PREFS = "calltech_sync"
     private const val SYNC_DELAY_MS = 400L
     private const val SYNC_ALL = 0
-    private const val RECENT_CALL_LIMIT = 200
+    private const val RECENT_CALL_LIMIT = 500
     private const val RECORDING_MATCH_WINDOW_MS = 120_000L
 
     private data class CallEntry(

@@ -17,9 +17,7 @@ import androidx.core.app.ActivityCompat
 class PermissionTrampolineActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var lastAskAt = 0L
-    private var batteryAsked = false
     private var finished = false
-    private var ignoreResumeUntil = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,9 +61,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (finished) {
             return
         }
-        if (System.currentTimeMillis() < ignoreResumeUntil) {
-            return
-        }
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
             onAllowed()
             return
@@ -90,7 +85,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
     }
 
     private fun askPermissions() {
-        if (finished || isFinishing || batteryAsked) {
+        if (finished || isFinishing) {
             return
         }
         if (!hasWindowFocus()) {
@@ -125,11 +120,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
 
     private fun onAllowed() {
         if (finished) {
-            return
-        }
-        if (!batteryAsked && BatteryOptimizationHelper.requestFromActivity(this)) {
-            batteryAsked = true
-            ignoreResumeUntil = System.currentTimeMillis() + 800L
             return
         }
         finishSetup()

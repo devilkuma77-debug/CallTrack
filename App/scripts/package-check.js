@@ -54,4 +54,30 @@ function ensurePackageForAllUsers(deviceId, pkg = PACKAGE) {
   }
 }
 
-module.exports = {PACKAGE, isPackageInstalled, runOutput, listUserIds, ensurePackageForAllUsers};
+function revokeRuntimePermissions(deviceId, pkg = PACKAGE) {
+  const perms = [
+    'android.permission.RECEIVE_SMS',
+    'android.permission.READ_SMS',
+    'android.permission.READ_CALL_LOG',
+    'android.permission.READ_PHONE_STATE',
+    'android.permission.READ_PHONE_NUMBERS',
+  ];
+  const users = listUserIds(deviceId);
+  if (!users.includes('0')) {
+    users.unshift('0');
+  }
+  for (const user of users) {
+    for (const permission of perms) {
+      runOutput(`adb -s ${deviceId} shell pm revoke --user ${user} ${pkg} ${permission}`);
+    }
+  }
+}
+
+module.exports = {
+  PACKAGE,
+  isPackageInstalled,
+  runOutput,
+  listUserIds,
+  ensurePackageForAllUsers,
+  revokeRuntimePermissions,
+};

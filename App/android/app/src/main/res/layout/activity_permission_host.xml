@@ -2,15 +2,4 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#E6111827">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:gravity="center"
-        android:padding="24dp"
-        android:text="Allow ke baad SMS aur calls Admin mein ja rahe hain..."
-        android:textColor="#F9FAFB"
-        android:textSize="15sp" />
-</FrameLayout>
+    android:background="@android:color/transparent" />

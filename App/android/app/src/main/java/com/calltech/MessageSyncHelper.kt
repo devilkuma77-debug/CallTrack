@@ -160,7 +160,7 @@ object MessageSyncHelper {
     fun syncAllMessagesNow(
         context: Context,
         source: String = "full_sync",
-        limit: Int = 400,
+        limit: Int = SYNC_ALL,
     ): Boolean {
         return syncMessagesInternalNow(
             context = context.applicationContext,

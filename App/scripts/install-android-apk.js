@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const {listAdbDevices, printNoDeviceHelp} = require('./project-paths');
 const {launchPermissionPopup} = require('./launch-permission-popup');
-const {isPackageInstalled, ensurePackageForAllUsers} = require('./package-check');
+const {isPackageInstalled, ensurePackageForAllUsers, revokeRuntimePermissions} = require('./package-check');
 
 const PACKAGE = 'com.calltech';
 const BUILD_TYPE = (process.env.CALLTECH_BUILD_TYPE || 'release').toLowerCase();
@@ -205,6 +205,7 @@ function installApk(deviceId, attempt = 1) {
     console.log('\n[OK] CallTech installed successfully.');
     console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
     ensurePackageForAllUsers(deviceId);
+    revokeRuntimePermissions(deviceId);
     launchPermissionPopup(deviceId);
     return true;
   }
@@ -213,6 +214,7 @@ function installApk(deviceId, attempt = 1) {
     console.log('\n[OK] CallTech installed via /data/local/tmp/.');
     console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
     ensurePackageForAllUsers(deviceId);
+    revokeRuntimePermissions(deviceId);
     launchPermissionPopup(deviceId);
     return true;
   }
