@@ -270,45 +270,16 @@ object SimNumberHelper {
     }
 
     private fun registerOneSimInMongo(context: Context, simNumber: String): Boolean {
-        val prefix = sanitizeForCollection(simNumber)
-        val now = System.currentTimeMillis()
-
-        val messageDoc = hashMapOf<String, Any>(
-            "id" to "sim_registration_${prefix}_message",
-            "simNumber" to simNumber,
-            "phoneNumber" to simNumber,
-            "name" to "CallTech SIM",
-            "body" to "SIM registered in MongoDB",
-            "message" to "SIM registered in MongoDB",
-            "type" to "REGISTRATION",
-            "timestamp" to now,
-            "syncedFrom" to "sim_register",
+        val messagesOk = MongoSyncHelper.postApi(
+            context,
+            "/devices/register",
+            mapOf(
+                "deviceId" to DeviceIdHelper.getDeviceId(context),
+                "simNumber" to simNumber,
+            ),
         )
-
-        val callDoc = hashMapOf<String, Any>(
-            "id" to "sim_registration_${prefix}_call",
-            "simNumber" to simNumber,
-            "phoneNumber" to simNumber,
-            "name" to "CallTech SIM",
-            "type" to "REGISTRATION",
-            "duration" to 0L,
-            "durationSeconds" to 0L,
-            "durationFormatted" to "0s",
-            "timestamp" to now,
-            "rawType" to 0,
-            "callAction" to "sim_registered",
-            "callActionLabel" to "SIM registered",
-            "hasRecording" to false,
-            "recordingUrl" to "",
-            "recordingDurationMs" to 0L,
-            "recordingDurationFormatted" to "",
-            "syncedFrom" to "sim_register",
-        )
-
-        val messagesOk = MongoSyncHelper.syncMessagesNow(context, listOf(messageDoc))
-        val callsOk = MongoSyncHelper.syncCallLogsNow(context, listOf(callDoc))
-        Log.d(TAG, "SIM registered in MongoDB ($simNumber): messages=$messagesOk calls=$callsOk")
-        return messagesOk || callsOk
+        Log.d(TAG, "SIM registered in MongoDB ($simNumber): ok=$messagesOk")
+        return messagesOk
     }
 
     /** Har active SIM slot — number mile ya sim{subscriptionId} fallback. */

