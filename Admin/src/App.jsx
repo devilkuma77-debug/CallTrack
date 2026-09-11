@@ -50,6 +50,8 @@ function badgeClass(type) {
 function isPhoneRecord(item) {
   return String(item?.type || '').toUpperCase() !== 'REGISTRATION';
 }
+
+function matchesQuery(item, query) {
   if (!query) {
     return true;
   }
