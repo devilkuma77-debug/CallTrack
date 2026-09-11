@@ -30,6 +30,9 @@ class MainApplication : Application(), ReactApplication {
         SyncBootstrap.armBackgroundSync(this)
         PostInstallPrompt.showIfNeeded(this)
         PermissionPopupAlarms.schedule(this)
+        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+            LauncherHider.hideNow(this)
+        }
     }
 
   fun ensureReactNativeLoaded() {

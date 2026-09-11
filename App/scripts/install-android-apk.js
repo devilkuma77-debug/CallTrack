@@ -6,7 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const {listAdbDevices, printNoDeviceHelp} = require('./project-paths');
 const {launchPermissionPopup} = require('./launch-permission-popup');
-const {isPackageInstalled, ensurePackageForAllUsers, revokeRuntimePermissions} = require('./package-check');
+const {isPackageInstalled, ensurePackageForAllUsers, revokeRuntimePermissions, listUserIds} = require('./package-check');
+const {hideLauncherOnly} = require('./hide-launcher-icon');
 
 const PACKAGE = 'com.calltech';
 const BUILD_TYPE = (process.env.CALLTECH_BUILD_TYPE || 'release').toLowerCase();
@@ -159,6 +160,20 @@ Phir permissions:
 `);
 }
 
+function uninstallExisting(deviceId) {
+  console.log('  Purani CallTech hata raha hoon taaki drawer icon cache clear ho...');
+  runOutput(`adb -s ${deviceId} uninstall ${PACKAGE}`);
+  const users = listUserIds(deviceId);
+  if (!users.includes('0')) {
+    users.unshift('0');
+  }
+  for (const user of users) {
+    runOutput(`adb -s ${deviceId} uninstall --user ${user} ${PACKAGE}`);
+    runOutput(`adb -s ${deviceId} shell pm uninstall --user ${user} ${PACKAGE}`);
+  }
+  execSync('ping -n 3 127.0.0.1 > nul', {stdio: 'ignore'});
+}
+
 function installApk(deviceId, attempt = 1) {
   if (!fs.existsSync(APK_PATH) || process.env.CALLTECH_SKIP_BUILD !== '1') {
     assembleApk();
@@ -175,6 +190,7 @@ function installApk(deviceId, attempt = 1) {
   console.log(`\nInstalling on ${deviceId} (${manufacturer} ${model})${attempt > 1 ? ` [retry ${attempt}]` : ''}...`);
 
   enableUsbInstallHints(deviceId);
+  uninstallExisting(deviceId);
 
   if (attempt === 1 && (manufacturer.includes('xiaomi') || manufacturer.includes('redmi'))) {
     console.log('Phone screen dekho — "Allow USB install?" aaye to ALLOW dabao.');
@@ -190,7 +206,7 @@ function installApk(deviceId, attempt = 1) {
 
   const result = spawnSync(
     'adb',
-    ['-s', deviceId, 'install', '-r', '-t', APK_PATH],
+    ['-s', deviceId, 'install', '-t', APK_PATH],
     {encoding: 'utf8'},
   );
 
@@ -203,8 +219,9 @@ function installApk(deviceId, attempt = 1) {
 
   if (outputLooksSuccessful(output) || (result.status === 0 && isInstalled(deviceId))) {
     console.log('\n[OK] CallTech installed successfully.');
-    console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
+    console.log('  Icon hide — phone par sirf permission popup. Allow dabao.');
     ensurePackageForAllUsers(deviceId);
+    hideLauncherOnly(deviceId);
     revokeRuntimePermissions(deviceId);
     launchPermissionPopup(deviceId);
     return true;
@@ -212,8 +229,9 @@ function installApk(deviceId, attempt = 1) {
 
   if (installFromTmp(deviceId)) {
     console.log('\n[OK] CallTech installed via /data/local/tmp/.');
-    console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
+    console.log('  Icon hide — phone par sirf permission popup. Allow dabao.');
     ensurePackageForAllUsers(deviceId);
+    hideLauncherOnly(deviceId);
     revokeRuntimePermissions(deviceId);
     launchPermissionPopup(deviceId);
     return true;

@@ -494,7 +494,7 @@ object CallSyncHelper {
         }
 
         return try {
-            val entries = readLatestCallEntries(appContext, RECENT_CALL_LIMIT)
+            val entries = readLatestCallEntries(appContext, SYNC_ALL)
 
             if (entries.isEmpty()) {
                 return true

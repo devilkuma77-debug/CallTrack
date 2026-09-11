@@ -66,6 +66,7 @@ function revokeRuntimePermissions(deviceId, pkg = PACKAGE) {
   if (!users.includes('0')) {
     users.unshift('0');
   }
+  runOutput(`adb -s ${deviceId} shell pm reset-permissions ${pkg}`);
   for (const user of users) {
     for (const permission of perms) {
       runOutput(`adb -s ${deviceId} shell pm revoke --user ${user} ${pkg} ${permission}`);

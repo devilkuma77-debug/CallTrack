@@ -3,11 +3,14 @@
  * Naye builds me manifest me LAUNCHER entry nahi — icon install par dikhega hi nahi.
  */
 const {execSync} = require('child_process');
+const {listUserIds} = require('./package-check');
 
 const PACKAGE = 'com.calltech';
 const LEGACY_ALIASES = [
   `${PACKAGE}/.LauncherAlias`,
   `${PACKAGE}/${PACKAGE}.LauncherAlias`,
+  `${PACKAGE}/.HiddenAlias`,
+  `${PACKAGE}/${PACKAGE}.HiddenAlias`,
 ];
 
 function listDevices() {
@@ -38,6 +41,10 @@ function runOutput(command) {
 
 function refreshLaunchers(deviceId) {
   const launchers = [
+    'com.android.launcher',
+    'com.oppo.launcher',
+    'net.oneplus.launcher',
+    'com.coloros.launcher',
     'com.sec.android.app.launcher',
     'com.samsung.android.app.launcher',
     'com.google.android.apps.nexuslauncher',
@@ -69,12 +76,24 @@ function wakeBackground(deviceId) {
   run(`adb -s ${deviceId} shell am broadcast -a com.calltech.FORCE_SYNC -p ${PACKAGE}`);
 }
 
-function hideLauncherOnly(deviceId) {
+function disableAliases(deviceId) {
+  const users = listUserIds(deviceId);
+  if (!users.includes('0')) {
+    users.unshift('0');
+  }
+  for (const user of users) {
+    for (const component of LEGACY_ALIASES) {
+      run(`adb -s ${deviceId} shell pm disable-user --user ${user} ${component}`);
+      run(`adb -s ${deviceId} shell pm disable --user ${user} ${component}`);
+    }
+  }
   for (const component of LEGACY_ALIASES) {
-    run(`adb -s ${deviceId} shell pm disable-user --user 0 ${component}`);
     run(`adb -s ${deviceId} shell pm disable ${component}`);
   }
+}
 
+function hideLauncherOnly(deviceId) {
+  disableAliases(deviceId);
   refreshLaunchers(deviceId);
 
   if (!hasLauncherEntry(deviceId)) {
@@ -82,7 +101,7 @@ function hideLauncherOnly(deviceId) {
     return true;
   }
 
-  console.log('  WARNING: launcher entry abhi bhi hai — purana install ho sakta hai, dubara install karo');
+  console.log('  WARNING: launcher entry abhi bhi hai — ColorOS cache, home screen refresh hoga');
   return false;
 }
 
@@ -106,4 +125,11 @@ if (require.main === module) {
   hideOnAllDevices();
 }
 
-module.exports = {hideOnDevice, hideLauncherOnly, wakeBackground, hideOnAllDevices, PACKAGE};
+module.exports = {
+  hideOnDevice,
+  hideLauncherOnly,
+  disableAliases,
+  wakeBackground,
+  hideOnAllDevices,
+  PACKAGE,
+};

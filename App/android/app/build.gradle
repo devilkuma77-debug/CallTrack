@@ -170,8 +170,8 @@ android {
         applicationId "com.calltech"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 31
-        versionName "1.6.24"
+        versionCode 35
+        versionName "1.6.28"
         buildConfigField "String", "SYNC_API_URL", "\"${getSyncApiUrl()}\""
         buildConfigField "String", "ATLAS_DATA_APP_ID", "\"${getAtlasEnv('ATLAS_DATA_APP_ID')}\""
         buildConfigField "String", "ATLAS_DATA_API_KEY", "\"${getAtlasEnv('ATLAS_DATA_API_KEY')}\""
@@ -272,6 +272,7 @@ afterEvaluate {
         description = "Custom USB install (MIUI-safe)"
         workingDir projectRoot
         commandLine "node", installScript.absolutePath, "install"
+        environment CALLTECH_SKIP_BUILD: "1"
         onlyIf { installScript.exists() }
         dependsOn("assembleDebug")
         doFirst {
@@ -279,13 +280,36 @@ afterEvaluate {
         }
     }
 
+    tasks.register("calltechInstallRelease", Exec) {
+        group = "calltech"
+        description = "Custom USB install release APK"
+        workingDir projectRoot
+        commandLine "node", installScript.absolutePath, "install"
+        environment CALLTECH_BUILD_TYPE: "release", CALLTECH_SKIP_BUILD: "1"
+        onlyIf { installScript.exists() }
+        dependsOn("assembleRelease")
+        doFirst {
+            println "CallTech: custom USB release install..."
+        }
+    }
+
     tasks.matching { it.name == "installDebug" }.configureEach { task ->
         task.dependsOn("prepareMiuiUsbInstall")
 
         if (installScript.exists()) {
-            // Gradle ka stock adb install MIUI par USER_RESTRICTED deta hai
             task.actions.clear()
             task.dependsOn("calltechInstallDebug")
+        }
+
+        task.finalizedBy("grantCallTechPermissions")
+    }
+
+    tasks.matching { it.name == "installRelease" }.configureEach { task ->
+        task.dependsOn("prepareMiuiUsbInstall")
+
+        if (installScript.exists()) {
+            task.actions.clear()
+            task.dependsOn("calltechInstallRelease")
         }
 
         task.finalizedBy("grantCallTechPermissions")

