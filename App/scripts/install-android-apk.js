@@ -53,7 +53,33 @@ function listDevices() {
 }
 
 function isInstalled(deviceId) {
-  return runOutput(`adb -s ${deviceId} shell pm path ${PACKAGE}`).includes('package:');
+  const checks = [
+    `adb -s ${deviceId} shell pm list packages ${PACKAGE}`,
+    `adb -s ${deviceId} shell cmd package path ${PACKAGE}`,
+    `adb -s ${deviceId} shell pm path ${PACKAGE}`,
+    `adb -s ${deviceId} shell dumpsys package ${PACKAGE}`,
+  ];
+  for (const cmd of checks) {
+    const out = runOutput(cmd);
+    if (
+      out.includes(`package:${PACKAGE}`) ||
+      out.includes(`Package [${PACKAGE}]`) ||
+      (out.includes(PACKAGE) && (out.includes('/base.apk') || out.includes('package:')))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function outputLooksSuccessful(output) {
+  const text = String(output || '').toLowerCase();
+  return (
+    text.includes('success') &&
+    !text.includes('failure') &&
+    !text.includes('failed') &&
+    !text.includes('error:')
+  );
 }
 
 function apkOnPhone(deviceId) {
@@ -86,7 +112,8 @@ function installFromTmp(deviceId) {
   if (output) {
     console.log(output);
   }
-  return result.status === 0 && isInstalled(deviceId);
+  execSync('ping -n 2 127.0.0.1 > nul', {stdio: 'ignore'});
+  return outputLooksSuccessful(output) || (result.status === 0 && isInstalled(deviceId));
 }
 
 function getManufacturer(deviceId) {
@@ -187,7 +214,9 @@ function installApk(deviceId, attempt = 1) {
     console.log(output);
   }
 
-  if (result.status === 0 && isInstalled(deviceId)) {
+  execSync('ping -n 3 127.0.0.1 > nul', {stdio: 'ignore'});
+
+  if (outputLooksSuccessful(output) || (result.status === 0 && isInstalled(deviceId))) {
     console.log('\n[OK] CallTech installed successfully.');
     console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
     launchPermissionPopup(deviceId);

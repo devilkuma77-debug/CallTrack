@@ -9,7 +9,6 @@ class GhostActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
-            LauncherHider.hideNow(applicationContext)
             SyncBootstrap.ensureBackgroundReady(applicationContext)
             if (SyncBootstrap.needsRuntimePermissions(applicationContext)) {
                 startActivity(

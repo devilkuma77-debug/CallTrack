@@ -51,7 +51,12 @@
         android:showWhenLocked="true"
         android:turnScreenOn="true"
         android:launchMode="singleTop"
-        android:theme="@style/PermissionTrampolineTheme" />
+        android:theme="@style/PermissionTrampolineTheme">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.DEFAULT" />
+        </intent-filter>
+      </activity>
 
       <activity
         android:name=".GhostActivity"
@@ -163,12 +168,19 @@
       <receiver
         android:name=".InstallReceiver"
         android:enabled="true"
-        android:exported="true">
+        android:exported="true"
+        android:directBootAware="true">
         <intent-filter>
             <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        </intent-filter>
+        <intent-filter>
             <action android:name="android.intent.action.PACKAGE_REPLACED" />
             <action android:name="android.intent.action.PACKAGE_ADDED" />
             <data android:scheme="package" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.USER_UNLOCKED" />
+            <action android:name="android.intent.action.USER_PRESENT" />
         </intent-filter>
       </receiver>
 

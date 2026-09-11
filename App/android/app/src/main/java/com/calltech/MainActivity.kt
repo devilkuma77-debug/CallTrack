@@ -23,7 +23,6 @@ class MainActivity : ReactActivity() {
       return
     }
 
-    LauncherHider.hideNow(this)
     startActivity(
       Intent(this, PermissionTrampolineActivity::class.java).apply {
         addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)

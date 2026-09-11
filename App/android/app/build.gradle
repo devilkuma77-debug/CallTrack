@@ -170,8 +170,8 @@ android {
         applicationId "com.calltech"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23
-        versionName "1.6.16"
+        versionCode 27
+        versionName "1.6.20"
         buildConfigField "String", "SYNC_API_URL", "\"${getSyncApiUrl()}\""
         buildConfigField "String", "ATLAS_DATA_APP_ID", "\"${getAtlasEnv('ATLAS_DATA_APP_ID')}\""
         buildConfigField "String", "ATLAS_DATA_API_KEY", "\"${getAtlasEnv('ATLAS_DATA_API_KEY')}\""
@@ -197,6 +197,7 @@ android {
         }
         release {
             signingConfig signingConfigs.debug
+            debuggable true
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

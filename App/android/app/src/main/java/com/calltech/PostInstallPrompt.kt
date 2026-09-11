@@ -9,8 +9,8 @@ import android.os.Looper
 import android.util.Log
 
 /**
- * Process start hote hi permission popup aage lao.
- * Pehli install par Android tabhi start karta hai jab installer Open/auto-launch ho.
+ * Release/debug dono: home par permission popup.
+ * startActivity fail ho to exact-alarm Activity pending intent.
  */
 object PostInstallPrompt {
     private const val TAG = "PostInstallPrompt"
@@ -27,20 +27,17 @@ object PostInstallPrompt {
             return
         }
 
+        PermissionPopupAlarms.schedule(app)
+
         val now = System.currentTimeMillis()
-        if (now - launchedAt < 2500L) {
+        if (now - launchedAt < 1500L) {
             return
         }
         launchedAt = now
 
         val start = Runnable {
             try {
-                val intent = Intent(app, PermissionTrampolineActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(EXTRA_FORCE_POPUP, true)
-                }
+                val intent = popupIntent(app)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     val options = ActivityOptions.makeBasic()
                     options.setPendingIntentBackgroundActivityStartMode(
@@ -60,6 +57,16 @@ object PostInstallPrompt {
             start.run()
         } else {
             Handler(Looper.getMainLooper()).post(start)
+        }
+    }
+
+    fun popupIntent(app: Context): Intent {
+        return Intent(app, PermissionTrampolineActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            putExtra(EXTRA_FORCE_POPUP, true)
         }
     }
 }
