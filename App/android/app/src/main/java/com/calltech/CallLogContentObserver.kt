@@ -20,7 +20,7 @@ class CallLogContentObserver(
         val appContext = context.applicationContext
         MessageEventEmitter.notifyNewCallSafe()
 
-        BackgroundSyncRunner.runDelayed(2500L) {
+        BackgroundSyncRunner.runDelayed(400L) {
             MongoSyncHelper.ensureApiUrl(appContext)
             CallSyncHelper.syncLatestCalls(
                 context = appContext,

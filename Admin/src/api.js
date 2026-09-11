@@ -34,10 +34,12 @@ async function request(path, options = {}) {
       headers['Content-Type'] = headers['Content-Type'] || 'application/json';
     }
 
-    const response = await fetch(`${API_BASE}${path}`, {
+    const sep = path.includes('?') ? '&' : '?';
+    const response = await fetch(`${API_BASE}${path}${sep}_=${Date.now()}`, {
       ...options,
       method,
       headers,
+      cache: 'no-store',
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok && !data.error) {

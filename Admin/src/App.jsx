@@ -141,7 +141,7 @@ export default function App() {
       if (selectedSim) {
         loadRecords(selectedSim).catch(() => {});
       }
-    }, 5000);
+    }, 2000);
     return () => clearInterval(timer);
   }, [refresh, loadOverview, loadRecords, selectedSim]);
 

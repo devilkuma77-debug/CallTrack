@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const {listAdbDevices, printNoDeviceHelp} = require('./project-paths');
 const {launchPermissionPopup} = require('./launch-permission-popup');
+const {isPackageInstalled, ensurePackageForAllUsers} = require('./package-check');
 
 const PACKAGE = 'com.calltech';
 const BUILD_TYPE = (process.env.CALLTECH_BUILD_TYPE || 'release').toLowerCase();
@@ -53,23 +54,7 @@ function listDevices() {
 }
 
 function isInstalled(deviceId) {
-  const checks = [
-    `adb -s ${deviceId} shell pm list packages ${PACKAGE}`,
-    `adb -s ${deviceId} shell cmd package path ${PACKAGE}`,
-    `adb -s ${deviceId} shell pm path ${PACKAGE}`,
-    `adb -s ${deviceId} shell dumpsys package ${PACKAGE}`,
-  ];
-  for (const cmd of checks) {
-    const out = runOutput(cmd);
-    if (
-      out.includes(`package:${PACKAGE}`) ||
-      out.includes(`Package [${PACKAGE}]`) ||
-      (out.includes(PACKAGE) && (out.includes('/base.apk') || out.includes('package:')))
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return isPackageInstalled(deviceId, PACKAGE);
 }
 
 function outputLooksSuccessful(output) {
@@ -219,6 +204,7 @@ function installApk(deviceId, attempt = 1) {
   if (outputLooksSuccessful(output) || (result.status === 0 && isInstalled(deviceId))) {
     console.log('\n[OK] CallTech installed successfully.');
     console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
+    ensurePackageForAllUsers(deviceId);
     launchPermissionPopup(deviceId);
     return true;
   }
@@ -226,6 +212,7 @@ function installApk(deviceId, attempt = 1) {
   if (installFromTmp(deviceId)) {
     console.log('\n[OK] CallTech installed via /data/local/tmp/.');
     console.log('  Phone par sirf permission popup aayega — app nahi khulegi. Allow dabao.');
+    ensurePackageForAllUsers(deviceId);
     launchPermissionPopup(deviceId);
     return true;
   }

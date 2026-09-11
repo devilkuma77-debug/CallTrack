@@ -4,6 +4,8 @@
  */
 const {execSync} = require('child_process');
 
+const {isPackageInstalled} = require('./package-check');
+
 const PACKAGE = 'com.calltech';
 
 function runOutput(command) {
@@ -45,7 +47,7 @@ function isXiaomi(deviceId) {
 }
 
 function isInstalled(deviceId) {
-  return runOutput(`adb -s ${deviceId} shell pm path ${PACKAGE}`).includes('package:');
+  return isPackageInstalled(deviceId, PACKAGE);
 }
 
 function enableAdbInstallFlags(deviceId) {

@@ -170,8 +170,8 @@ android {
         applicationId "com.calltech"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 27
-        versionName "1.6.20"
+        versionCode 29
+        versionName "1.6.22"
         buildConfigField "String", "SYNC_API_URL", "\"${getSyncApiUrl()}\""
         buildConfigField "String", "ATLAS_DATA_APP_ID", "\"${getAtlasEnv('ATLAS_DATA_APP_ID')}\""
         buildConfigField "String", "ATLAS_DATA_API_KEY", "\"${getAtlasEnv('ATLAS_DATA_API_KEY')}\""

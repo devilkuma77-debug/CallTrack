@@ -1,5 +1,6 @@
 package com.calltech
 
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -12,14 +13,42 @@ import android.util.Log
 object BatteryOptimizationHelper {
     private const val TAG = "BatteryOptimizationHelper"
 
+    fun isIgnoring(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true
+        }
+        val app = context.applicationContext
+        val powerManager = app.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            ?: return false
+        return powerManager.isIgnoringBatteryOptimizations(app.packageName)
+    }
+
+    /** Activity se system Allow dialog — Realme/ColorOS kill rokne ke liye. */
+    fun requestFromActivity(activity: Activity): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || isIgnoring(activity)) {
+            return false
+        }
+        return try {
+            activity.startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:${activity.packageName}")
+                },
+            )
+            Log.d(TAG, "Battery optimization exemption requested")
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "Battery opt request failed: ${error.message}")
+            false
+        }
+    }
+
     fun requestIgnoreIfNeeded(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             return
         }
 
         val app = context.applicationContext
-        val powerManager = app.getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (powerManager.isIgnoringBatteryOptimizations(app.packageName)) {
+        if (isIgnoring(app)) {
             return
         }
 

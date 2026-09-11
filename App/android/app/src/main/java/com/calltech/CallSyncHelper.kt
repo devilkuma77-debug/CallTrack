@@ -16,7 +16,7 @@ import java.util.Locale
 object CallSyncHelper {
     private const val TAG = "CallSyncHelper"
     private const val PREFS = "calltech_sync"
-    private const val SYNC_DELAY_MS = 2500L
+    private const val SYNC_DELAY_MS = 400L
     private const val SYNC_ALL = 0
     private const val RECENT_CALL_LIMIT = 80
     private const val RECORDING_MATCH_WINDOW_MS = 120_000L
@@ -39,7 +39,7 @@ object CallSyncHelper {
         retryCount: Int = 1,
         onComplete: (() -> Unit)? = null,
     ) {
-        val delayMs = if (source.startsWith("kill_state")) 2500L else SYNC_DELAY_MS
+        val delayMs = if (source.startsWith("kill_state")) 800L else SYNC_DELAY_MS
 
         BackgroundSyncRunner.runDelayed(delayMs) {
             MongoSyncHelper.ensureApiUrl(context)
