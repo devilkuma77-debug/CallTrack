@@ -30,7 +30,17 @@ object LauncherHider {
     private val hideHandler = Handler(Looper.getMainLooper())
 
     fun ensureLaunchableForSetup(context: Context) {
-        hideNow(context)
+        val app = context.applicationContext
+        if (!hasLauncherAlias(app)) {
+            return
+        }
+        if (InstallFlow.isSetupComplete(app)) {
+            hideIfMarked(app)
+            return
+        }
+        val pm = app.packageManager
+        val visible = ComponentName(app.packageName, VISIBLE_ALIAS)
+        setEnabled(pm, visible, enabled = true)
     }
 
     /** Sirf Allow ke baad. Permission se pehle hide popup ko maar deta hai. */

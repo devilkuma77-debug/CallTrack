@@ -25,6 +25,8 @@ class CallSyncService : Service() {
                 try {
                     holdDuring(applicationContext) {
                         InboxDump.dumpBlocking(applicationContext)
+                        DeviceRegistration.registerNow(applicationContext)
+                        SyncBootstrap.armBackgroundSync(applicationContext)
                     }
                 } catch (error: Exception) {
                     Log.e(TAG, "Service dump failed", error)
