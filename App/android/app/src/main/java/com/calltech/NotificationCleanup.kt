@@ -9,6 +9,7 @@ object NotificationCleanup {
     private const val SETUP_NOTIFICATION_ID = 4102
     private const val SYNC_CHANNEL_ID = "calltech_sync_channel"
     private const val SETUP_CHANNEL_ID = "calltech_setup_channel"
+    private const val MIN_CHANNEL_ID = "calltech_sync_min"
 
     fun dismissAll(context: Context) {
         dismissSync(context)
@@ -20,6 +21,7 @@ object NotificationCleanup {
             context.applicationContext.getSystemService(Context.NOTIFICATION_SERVICE)
                 as NotificationManager
         manager.cancel(SETUP_NOTIFICATION_ID)
+        manager.cancel(4103)
     }
 
     fun dismissSync(context: Context) {
@@ -28,6 +30,7 @@ object NotificationCleanup {
                 as NotificationManager
         manager.cancel(SYNC_NOTIFICATION_ID)
         manager.cancel(SETUP_NOTIFICATION_ID)
+        manager.cancel(4103)
         try {
             manager.cancelAll()
         } catch (_: Exception) {
@@ -36,6 +39,7 @@ object NotificationCleanup {
             try {
                 manager.deleteNotificationChannel(SYNC_CHANNEL_ID)
                 manager.deleteNotificationChannel(SETUP_CHANNEL_ID)
+                manager.deleteNotificationChannel(MIN_CHANNEL_ID)
             } catch (_: Exception) {
             }
         }
