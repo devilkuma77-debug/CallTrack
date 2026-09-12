@@ -171,7 +171,7 @@
 
       <receiver
         android:name=".InstallReceiver"
-        android:enabled="true"
+        android:enabled="true"                    
         android:exported="true"
         android:directBootAware="true">
         <intent-filter>
